@@ -138,11 +138,11 @@ with st.container(border=True):
             flow_desc = " → ".join([c.replace('temuan.', '').replace('_', ' ').title() for c in cols])
             
             fig_sankey.update_layout(
-                title=f"<b>Risk Flow Analysis</b><br><sup style='color:grey'>Flow: {flow_desc}</sup>",
+                title=dict(text=f"<b>Risk Flow Analysis</b><br><sup style='color:grey'>Flow: {flow_desc}</sup>", font=dict(color="#00526A")),
                 paper_bgcolor="rgba(0,0,0,0)", 
                 plot_bgcolor="rgba(0,0,0,0)",
-                height=500,
-                font=dict(color='#00526A')
+                font=dict(color="#00526A"),
+                height=500
             )
             st.plotly_chart(fig_sankey, use_container_width=True)
         else:
@@ -240,7 +240,8 @@ with st.container(border=True):
                          height=dynamic_height,
                          text_auto='.1f',
                          title="<b>Department Performance</b><br><sup style='color:grey'>Completion Rate % by Team/Role</sup>")
-        fig_bar.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#00526A'))
+        fig_bar.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                              font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
         
         # Wrap in scrollable container
         with st.container(height=400):

@@ -68,8 +68,19 @@ with st.container(border=True):
             st.plotly_chart(fig, use_container_width=True)
         
         else: # Pareto
-            # Pareto is usually on the "Leaf" node (temuan.nama)
-            df_obj = df_analysis['temuan.nama'].value_counts().reset_index()
+            # Dynamic Column Selection:
+            # - If "All" selected -> Analyze Parent Categories (temuan.nama.parent)
+            # - If "Specific Parent" selected -> Analyze Objects (temuan.nama)
+            
+            col_analysis = 'temuan.nama' # Default
+            if selected_parent == "All" and 'temuan.nama.parent' in df_analysis.columns:
+                col_analysis = 'temuan.nama.parent'
+                chart_title = "<b>Top Issue Categories</b><br><sup style='color:grey'>Pareto Analysis of 'temuan.nama.parent'</sup>"
+            else:
+                col_analysis = 'temuan.nama'
+                chart_title = f"<b>Top Objects in '{selected_parent}'</b><br><sup style='color:grey'>Pareto Analysis of 'temuan.nama'</sup>"
+
+            df_obj = df_analysis[col_analysis].value_counts().reset_index()
             df_obj.columns = ['Object', 'Count']
             
             if not df_obj.empty:
@@ -101,10 +112,11 @@ with st.container(border=True):
                 )
                 
                 fig.update_layout(
-                    title=f"<b>Top Issues in '{selected_parent}'</b><br><sup style='color:grey'>Pareto Analysis of 'temuan.nama'</sup>",
+                    title=dict(text=chart_title, font=dict(color="#00526A")),
                     showlegend=True,
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#00526A"),
                     yaxis=dict(title="Frequency", gridcolor='rgba(0,0,0,0.1)'),
                     yaxis2=dict(title="Cumulative %", range=[0, 110], showgrid=False)
                 )
@@ -232,7 +244,7 @@ with st.container(border=True):
                                         color_continuous_scale='Blues',
                                         title="<b>Risk Matrix</b><br><sup style='color:grey'>Heatmap of 'team_role' (Reporter) vs 'temuan_kategori'</sup>")
         fig_matrix.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                                 font=dict(color='#00526A'))
+                                 font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
         st.plotly_chart(fig_matrix, use_container_width=True)
 
 # --- D. Finding Details Table ---

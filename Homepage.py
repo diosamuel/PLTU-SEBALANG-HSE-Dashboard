@@ -97,7 +97,8 @@ with col_left:
             fig_trend = px.line(df_trend, x='tanggal', y='kode_temuan', markers=True, 
                                 color_discrete_sequence=['#00526A'],
                                 title="<b>Finding Trend</b><br><sup style='color:grey'>Count of unique 'kode_temuan' per Month</sup>")
-            fig_trend.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+            fig_trend.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                    font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
             st.plotly_chart(fig_trend, use_container_width=True)
 
 with col_right:
@@ -120,7 +121,8 @@ with col_right:
             fig_pie = px.pie(df_risk, values='Count', names='Category', 
                             color='Category', color_discrete_map=color_map, hole=0.4,
                             title="<b>Risk Distribution</b><br><sup style='color:grey'>Proportion of 'temuan_kategori'</sup>")
-            fig_pie.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+            fig_pie.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                  font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
             st.plotly_chart(fig_pie, use_container_width=True)
 
 # --- 8. Charts (Row 2: Top Issues) ---
@@ -140,7 +142,8 @@ with st.container(border=True):
                         title="<b>Recurring Issues</b><br><sup style='color:grey'>Frequency of 'temuan.nama' elements</sup>")
         fig_bar.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", 
                               yaxis=dict(autorange="reversed"),
-                              font=dict(color='#00526A'))
+                              font=dict(color="#00526A"),
+                              title=dict(font=dict(color="#00526A")))
         
         # Wrap in scrollable container
         with st.container(height=400):
