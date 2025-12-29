@@ -231,7 +231,8 @@ with st.container(border=True):
         fig_matrix = px.density_heatmap(df_matrix, x='temuan_kategori', y='team_role', z='Count', 
                                         color_continuous_scale='Blues',
                                         title="<b>Risk Matrix</b><br><sup style='color:grey'>Heatmap of 'team_role' (Reporter) vs 'temuan_kategori'</sup>")
-        fig_matrix.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+        fig_matrix.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                                 font=dict(color='#00526A'))
         st.plotly_chart(fig_matrix, use_container_width=True)
 
 # --- D. Finding Details Table ---

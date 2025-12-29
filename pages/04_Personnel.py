@@ -106,7 +106,7 @@ with st.container(border=True):
                 font=dict(size=10, color="#00526A")
             )
             
-        fig_scatter.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+        fig_scatter.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#00526A'))
         st.plotly_chart(fig_scatter, use_container_width=True)
     else:
         st.info("No reporter data available.")
@@ -182,7 +182,7 @@ with st.container(border=True):
                 fig_pie = px.pie(risk_counts, values='Count', names='Category',
                                  color='Category', color_discrete_map=color_map, hole=0.4,
                                  title=f"<b>Risk Profile</b><br><sup style='color:grey'>Reports by Category</sup>")
-                fig_pie.update_layout(showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                fig_pie.update_layout(showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#00526A'))
                 # Force text inside to save space
                 fig_pie.update_traces(textposition='inside', textinfo='percent+label')
                 

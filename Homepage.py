@@ -138,7 +138,9 @@ with st.container(border=True):
                         color_discrete_sequence=['#00526A'],
                         height=dynamic_height,
                         title="<b>Recurring Issues</b><br><sup style='color:grey'>Frequency of 'temuan.nama' elements</sup>")
-        fig_bar.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis=dict(autorange="reversed"))
+        fig_bar.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", 
+                              yaxis=dict(autorange="reversed"),
+                              font=dict(color='#00526A'))
         
         # Wrap in scrollable container
         with st.container(height=400):
