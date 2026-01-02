@@ -14,5 +14,5 @@ venv/
 data/
 
 # Debug files
-debug_*.py
+# debug_*.py
 

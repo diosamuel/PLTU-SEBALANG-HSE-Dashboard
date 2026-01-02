@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
-from folium.plugins import MarkerCluster
+from folium.plugins import MarkerCluster, HeatMap
 from utils import load_data, render_sidebar
 
 # Page Config
@@ -21,54 +21,92 @@ col_map, col_details = st.columns([3, 1])
 with col_map:
     # --- Folium Map ---
     # Merge Master Data with Coordinates
-    # We map 'nama_lokasi' to 'location_name' in df_map
-    if not df_map.empty and 'nama_lokasi' in df_master_filtered.columns:
-        # Standardize join keys
-        df_master_filtered['join_key'] = df_master_filtered['nama_lokasi'].str.lower().str.strip()
-        df_map['join_key'] = df_map['location_name'].str.lower().str.strip()
-        
-        df_geo = df_master_filtered.merge(df_map, on='join_key', how='inner')
+    # Note: df_master already has 'lat', 'lon' joined in utils.load_data() logic if available
+    
+    if 'lat' in df_master_filtered.columns and 'lon' in df_master_filtered.columns:
+        # Filter purely for mapping (must have coords)
+        df_geo = df_master_filtered.dropna(subset=['lat', 'lon'])
         
         if not df_geo.empty:
-            # Base Map (Sebalang Coordinates approx)
-            center_lat = df_geo['lat'].mean()
-            center_lon = df_geo['lon'].mean()
-            if pd.isnull(center_lat): center_lat = -5.6
-            if pd.isnull(center_lon): center_lon = 105.4
+            # Base Map (Fixed Coordinates as requested)
+            center_lat = -5.585357333271365
+            center_lon = 105.38785245329919
             
-            m = folium.Map(location=[center_lat, center_lon], zoom_start=16)
+            st.info(f"Debug: {len(df_geo)} findings with coordinates loaded.")
             
-            # Layer Control
-            folium.TileLayer('cartodbpositron').add_to(m)
-            folium.TileLayer('OpenStreetMap').add_to(m)
+            # Show the user the data to prove lat/lon exists and is split
+            with st.expander("Show Map Data (Debug)"):
+                st.dataframe(df_geo[['kode_temuan', 'nama_lokasi', 'lat', 'lon']].head(50))
             
-            marker_cluster = MarkerCluster().add_to(m)
+            m = folium.Map(location=[center_lat, center_lon], zoom_start=17)
+            
+            # --- Layers ---
+            # 1. Stadia Alidade Satellite (Default)
+            folium.TileLayer(
+                tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg',
+                attr='&copy; CNES, Distribution Airbus DS, &copy; Airbus DS, &copy; PlanetObserver (Contains Copernicus Data) | &copy; Stadia Maps &copy; OpenMapTiles &copy; OpenStreetMap contributors',
+                name='Stadia Satellite'
+            ).add_to(m)
+            
+            # 2. CartoDB Light (Optional Layer for contrast)
+            folium.TileLayer('cartodbpositron', name='Street Map (Light)').add_to(m)
+            
+            # 2. Heatmap (All findings freq)
+            heat_data = [[row['lat'], row['lon']] for index, row in df_geo.iterrows()]
+            HeatMap(heat_data, radius=15, blur=10, name='Heatmap').add_to(m)
+            
+            # 3. Markers (Pins) - Only for 'Open' status
+            # Check if temuan_status exists
+            if 'temuan_status' in df_geo.columns:
+                df_pins = df_geo[df_geo['temuan_status'].astype(str).str.lower() == 'open']
+            else:
+                df_pins = df_geo # Fallback
+            
+            marker_cluster = MarkerCluster(name='Findings (Open)').add_to(m)
             
             # Color Logic
             def get_color(category):
-                if 'Near Miss' in category: return 'red'
-                if 'Unsafe' in category: return 'orange'
-                return 'darkblue'
+                cat_lower = str(category).lower()
+                if 'near miss' in cat_lower: return 'red'
+                if 'unsafe condition' in cat_lower: return 'beige' # Folium doesn't have yellow, beige is close or use custom HTML
+                if 'unsafe action' in cat_lower: return 'orange'
+                if 'positive' in cat_lower: return 'green'
+                return 'blue' # Default
             
-            for _, row in df_geo.iterrows():
-                if pd.notnull(row['lat']) and pd.notnull(row['lon']):
-                    folium.Marker(
-                        location=[row['lat'], row['lon']],
-                        popup=f"<b>{row['kode_temuan']}</b><br>{row['nama_lokasi_x']}<br>{row['temuan_kategori']}",
-                        icon=folium.Icon(color=get_color(str(row['temuan_kategori'])))
-                    ).add_to(marker_cluster)
+            # Folium valid colors: 'red', 'blue', 'green', 'purple', 'orange', 'darkred',
+            # 'lightred', 'beige', 'darkblue', 'darkgreen', 'cadetblue', 'darkpurple', 'white', 'pink', 'lightblue', 'lightgreen', 'gray', 'black', 'lightgray'
+            
+            for _, row in df_pins.iterrows():
+                # Prepare Popup Content
+                parent = row['temuan.nama.parent'] if 'temuan.nama.parent' in row else '-'
+                child = row['temuan.nama'] if 'temuan.nama' in row else '-'
+                location = row['nama_lokasi'] if 'nama_lokasi' in row else '-'
+                
+                popup_html = f"""
+                <b>Parent:</b> {parent}<br>
+                <b>Child:</b> {child}<br>
+                <b>Loc:</b> {location}
+                """
+                
+                color = get_color(row.get('temuan_kategori', ''))
+                
+                folium.Marker(
+                    location=[row['lat'], row['lon']],
+                    popup=folium.Popup(popup_html, max_width=300),
+                    icon=folium.Icon(color=color, icon='info-sign')
+                ).add_to(marker_cluster)
             
             folium.LayerControl().add_to(m)
             
-            st_folium(m, width="100%", height=600)
+            st_folium(m, width="100%", height=700)
         else:
             st.warning("No coordinate matches found for filtered data.")
     else:
-        st.warning("Map data missing or invalid columns.")
+        st.warning("Spatial data fields (lat/lon) missing in master dataset.")
 
 with col_details:
-    st.subheader("Top Risk Areas")
+    st.markdown("### Top Lokasi Temuan")
     if 'nama_lokasi' in df_master_filtered.columns:
-        # Simple Risk Index: Just count needed for now, schema says weighted but simple count is safer MVP
-        top_locs = df_master_filtered['nama_lokasi'].value_counts().head(10)
-        st.write(top_locs)
+        # Ranking based on unique findings count
+        top_locs = df_master_filtered.groupby('nama_lokasi')['kode_temuan'].nunique().sort_values(ascending=False).head(20)
+        st.dataframe(top_locs)

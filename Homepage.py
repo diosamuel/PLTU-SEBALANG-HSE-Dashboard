@@ -4,6 +4,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from utils import load_data, calculate_kpi, filter_by_date
 from datetime import datetime, timedelta
+import folium
+from streamlit_folium import st_folium
+from folium.plugins import HeatMap
 
 # --- 1. Page Configuration ---
 st.set_page_config(
@@ -88,7 +91,7 @@ st.markdown("---")
 col_left, col_right = st.columns([2, 1])
 
 with col_left:
-    with st.container(border=True):
+    with st.container():
         st.subheader("Finding Trend (Monthly)")
         st.caption("Visualizes the volume of findings over time to identify seasonal trends or spikes.")
         # Group by Month
@@ -98,11 +101,12 @@ with col_left:
                                 color_discrete_sequence=['#00526A'],
                                 title="<b>Finding Trend</b><br><sup style='color:grey'>Count of unique 'kode_temuan' per Month</sup>")
             fig_trend.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                    font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
+                                    font=dict(color="#00526A"), 
+                                    title=dict(font=dict(color="#00526A")))
             st.plotly_chart(fig_trend, use_container_width=True)
 
 with col_right:
-    with st.container(border=True):
+    with st.container():
         st.subheader("Risk Distribution")
         st.caption("Breakdown of findings by Risk Category.")
         if 'temuan_kategori' in df_master_filtered.columns:
@@ -120,13 +124,14 @@ with col_right:
             
             fig_pie = px.pie(df_risk, values='Count', names='Category', 
                             color='Category', color_discrete_map=color_map, hole=0.4,
-                            title="<b>Risk Distribution</b><br><sup style='color:grey'>Proportion of 'temuan_kategori'</sup>")
+                            title="<b>Risk Distribution</b><br><sup style='color:#00526A'>Proportion of 'temuan_kategori'</sup>")
             fig_pie.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                  font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
+                                  font=dict(color="#00526A"), 
+                                  title=dict(font=dict(color="#00526A")))
             st.plotly_chart(fig_pie, use_container_width=True)
 
 # --- 8. Charts (Row 2: Top Issues) ---
-with st.container(border=True):
+with st.container():
     st.subheader("Top Recuring Issues (Object)")
     st.caption("Identifies the most frequently reported objects to target preventive maintenance.")
     if 'temuan.nama' in df_exploded_filtered.columns:
@@ -139,15 +144,50 @@ with st.container(border=True):
         fig_bar = px.bar(top_objects, x='Count', y='Object', orientation='h',
                         color_discrete_sequence=['#00526A'],
                         height=dynamic_height,
-                        title="<b>Recurring Issues</b><br><sup style='color:grey'>Frequency of 'temuan.nama' elements</sup>")
+                        title="<b>Recurring Issues</b><br><sup style='color:#00526A'>Frequency of 'temuan.nama' elements</sup>")
         fig_bar.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", 
-                              yaxis=dict(autorange="reversed"),
+                              yaxis=dict(autorange="reversed", color="#00526A"),
+                              xaxis=dict(color="#00526A"),
                               font=dict(color="#00526A"),
                               title=dict(font=dict(color="#00526A")))
         
-        # Wrap in scrollable container
-        with st.container(height=400):
-            st.plotly_chart(fig_bar, use_container_width=True)
+        # Convert to HTML for robust scrolling in older Streamlit versions
+        import streamlit.components.v1 as components
+        chart_html = fig_bar.to_html(include_plotlyjs='cdn', full_html=False)
+        
+        # Embed with scrolling enabled
+        components.html(chart_html, height=400, scrolling=True)
+        
     else:
         st.info("Column 'temuan.nama' not found for object analysis.")
+
+# --- 9. Mini Heatmap (New Requirement) ---
+with st.container():
+    st.subheader("Heatmaps (Folium)")
+    st.caption("Intensity of findings based on location frequency.")
+    
+    if 'lat' in df_master_filtered.columns and 'lon' in df_master_filtered.columns:
+        df_geo_home = df_master_filtered.dropna(subset=['lat', 'lon'])
+        
+        if not df_geo_home.empty:
+            center_lat = df_geo_home['lat'].mean()
+            center_lon = df_geo_home['lon'].mean()
+            if pd.isnull(center_lat): center_lat = -5.6
+            if pd.isnull(center_lon): center_lon = 105.4
+            
+            m_home = folium.Map(location=[center_lat, center_lon], zoom_start=16)
+            folium.TileLayer(
+                tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg',
+                attr='&copy; CNES, Distribution Airbus DS, &copy; Airbus DS, &copy; PlanetObserver | &copy; Stadia Maps',
+                name='Stadia Satellite'
+            ).add_to(m_home)
+            
+            heat_data = [[row['lat'], row['lon']] for index, row in df_geo_home.iterrows()]
+            HeatMap(heat_data, radius=12, blur=8).add_to(m_home)
+            
+            st_folium(m_home, height=400, width="100%")
+        else:
+            st.info("No spatial data available for heatmap.")
+    else:
+        st.warning("Latitude/Longitude data missing.")
 

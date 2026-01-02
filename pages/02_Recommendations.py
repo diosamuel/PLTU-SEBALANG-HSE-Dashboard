@@ -17,7 +17,7 @@ df_master_filtered, df_exploded_filtered = render_sidebar(df_master, df_exploded
 st.title("Recommendations & SLA")
 
 # --- A. Risk-to-Location Flow (Sankey) ---
-with st.container(border=True):
+with st.container():
     st.subheader("Risk Flow Analysis (Category → Object → Place)")
 
     if not df_exploded_filtered.empty:
@@ -138,7 +138,7 @@ with st.container(border=True):
             flow_desc = " → ".join([c.replace('temuan.', '').replace('_', ' ').title() for c in cols])
             
             fig_sankey.update_layout(
-                title=dict(text=f"<b>Risk Flow Analysis</b><br><sup style='color:grey'>Flow: {flow_desc}</sup>", font=dict(color="#00526A")),
+                title=dict(text=f"<b>Risk Flow Analysis</b><br><sup style='color:#00526A'>Flow: {flow_desc}</sup>", font=dict(color="#00526A")),
                 paper_bgcolor="rgba(0,0,0,0)", 
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#00526A"),
@@ -201,50 +201,46 @@ with c3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # --- C. High Risk Priority Table---
-with st.container(border=True):
+with st.container():
     st.subheader("High-Risk Priority Actions")
     high_risk_df = df_master_filtered[df_master_filtered['temuan_kategori'] == 'Near Miss']
 
-    def highlight_rows(row):
-        # Translucent Red Highlight for High Risk
-        # Stronger red for Open items, lighter for Closed
-        if row['temuan_status'] == 'Open':
-            return [f'background-color: rgba(255, 75, 75, 0.3); color: #000000' for _ in row]
-        else:
-            return [f'background-color: rgba(255, 75, 75, 0.1); color: #00526A' for _ in row]
-
-    st.dataframe(high_risk_df.style.apply(highlight_rows, axis=1), use_container_width=True)
+    if not high_risk_df.empty:
+        st.dataframe(
+            high_risk_df[['tanggal', 'temuan.nama', 'temuan.kondisi.lemma', 'nama_lokasi', 'deadline_sla', 'temuan_status']].head(20),
+            use_container_width=True
+        )
+    else:
+        st.success("No 'Near Miss' findings found in this filter selection.")
 
 # --- D. SLA per Department ---
 # Using 'team_role' as Department
-with st.container(border=True):
+with st.container():
     st.subheader("Department Performance")
     
     dept_col = 'team_role' if 'team_role' in df_master_filtered.columns else None
     
     if dept_col:
-        dept_perf = df_master_filtered.groupby(dept_col)['kode_temuan'].count().reset_index(name='Total Findings')
-        # Add Closed count
-        closed_counts = df_master_filtered[df_master_filtered['temuan_status'] == 'Closed'].groupby(dept_col)['kode_temuan'].count().reset_index(name='Closed')
-        dept_perf = dept_perf.merge(closed_counts, on=dept_col, how='left').fillna(0)
-        dept_perf['Completion Rate'] = (dept_perf['Closed'] / dept_perf['Total Findings']) * 100
+        # Calculate Compliance
+        # Simple Logic: Closed / Total
+        df_dept = df_master_filtered.groupby(dept_col).agg(
+            Total=('kode_temuan', 'nunique'),
+            Closed=('temuan_status', lambda x: (x == 'Closed').sum())
+        ).reset_index()
         
-        # Sort
-        dept_perf = dept_perf.sort_values('Completion Rate', ascending=True)
+        df_dept['Compliance%'] = (df_dept['Closed'] / df_dept['Total']) * 100
         
-        # Dynamic Height
-        dynamic_height = max(400, len(dept_perf) * 30)
+        fig_dept = px.bar(df_dept, x='Compliance%', y=dept_col, orientation='h',
+                          title="<b>Department Compliance</b><br><sup style='color:#00526A'>Percentage of Closed Findings</sup>",
+                          color='Compliance%',
+                          color_continuous_scale='Teal')
         
-        fig_bar = px.bar(dept_perf, x='Completion Rate', y=dept_col, orientation='h', 
-                         color_discrete_sequence=['#00526A'],
-                         height=dynamic_height,
-                         text_auto='.1f',
-                         title="<b>Department Performance</b><br><sup style='color:grey'>Completion Rate % by Team/Role</sup>")
-        fig_bar.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                              font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
+        fig_dept.add_vline(x=85, line_dash="dash", line_color="green", annotation_text="Target 85%")
         
-        # Wrap in scrollable container
-        with st.container(height=400):
-            st.plotly_chart(fig_bar, use_container_width=True)
+        fig_dept.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                               font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")),
+                               yaxis=dict(color="#00526A"), xaxis=dict(color="#00526A"))
+        
+        st.plotly_chart(fig_dept, use_container_width=True)
     else:
         st.info("Department data (team_role) not found.")

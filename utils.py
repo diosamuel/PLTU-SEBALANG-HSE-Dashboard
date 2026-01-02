@@ -5,7 +5,7 @@ from datetime import datetime
 
 # Constants
 DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/IZAT RAPIH - Experiment Ketiga.csv')
-MAP_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/location_name_mapped-coords.csv')
+MAP_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/map_izat.csv')
 
 def load_css():
     st.markdown("""
@@ -17,7 +17,7 @@ def load_css():
     }
     
     /* Text Color & Visibility */
-    h1, h2, h3, h4, h5, h6, p, div, span, label {
+    h1, h2, h3, h4, h5, h6, p, div, span, label, .stMarkdown {
         color: #00526A !important;
         text-shadow: none !important;
     }
@@ -28,24 +28,62 @@ def load_css():
         border-right: 1px solid #CBECF5;
     }
     
-    /* Metric Cards */
+    /* Metric Cards - Translucent */
     .metric-card {
-        background: #FFFFFF;
+        background: rgba(255, 255, 255, 0.6); /* Translucent White */
         padding: 15px;
         border-radius: 15px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
         text-align: center;
-        border: 1px solid #CBECF5;
+        border: 1px solid rgba(255, 255, 255, 0.5);
         min-height: 180px;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
+        backdrop-filter: blur(10px); /* Frosted Glass Effect */
     }
     
     /* Chart Containers */
     .plot-container {
         background: transparent !important;
+    }
+    
+    /* Input Elements (Selectbox, DateInput, etc) - Light Mode Translucent */
+    .stSelectbox div[data-baseweb="select"] > div {
+        background-color: rgba(255, 255, 255, 0.7) !important;
+        color: #00526A !important;
+        border: 1px solid rgba(0, 82, 106, 0.2) !important;
+    }
+    
+    /* Dataframe/Table */
+    [data-testid="stDataFrame"] {
+        background-color: rgba(255, 255, 255, 0.6) !important;
+    }
+    
+    /* Scrollable Container */
+    .scrollable-container {
+        height: 400px; /* Fixed height to force scroll */
+        max-height: 400px;
+        overflow-y: scroll !important; /* Force scrollbar always */
+        padding-right: 15px; /* Space for scrollbar */
+        border: 1px solid rgba(0, 82, 106, 0.1); /* Subtle border */
+        border-radius: 10px;
+    }
+    
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: transparent; 
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #888; 
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #555; 
     }
     </style>
     """, unsafe_allow_html=True)
@@ -73,12 +111,31 @@ def load_data():
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
 
+    # Process Map Data
+    if 'latlong' in df_map.columns:
+        # Split and coerce to numeric, turning errors (like 'belt conveyor') into NaN
+        coords = df_map['latlong'].str.split(',', expand=True)
+        if coords.shape[1] >= 2:
+            df_map['lat'] = pd.to_numeric(coords[0], errors='coerce')
+            df_map['lon'] = pd.to_numeric(coords[1], errors='coerce')
+        else:
+            df_map['lat'] = None
+            df_map['lon'] = None
+            
+    # Standardize join keys for merging
+    if 'Tempat' in df_map.columns:
+        df_map['Tempat'] = df_map['Tempat'].astype(str).str.strip()
+    
     df_exploded = df.copy()
 
     if 'kode_temuan' in df.columns:
         df_master = df.drop_duplicates(subset='kode_temuan').copy()
     else:
         df_master = df.copy()
+        
+    # Perform Left Join if keys exist
+    if 'nama_lokasi' in df_master.columns and 'Tempat' in df_map.columns:
+        df_master = df_master.merge(df_map, left_on='nama_lokasi', right_on='Tempat', how='left')
 
     return df_exploded, df_master, df_map
 

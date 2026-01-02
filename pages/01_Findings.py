@@ -20,7 +20,7 @@ st.title("Findings Analysis")
 
 # --- A. Object Analysis (Pareto/Treemap) ---
 # --- A. Object Analysis (Pareto/Treemap) ---
-with st.container(border=True):
+with st.container():
     st.subheader("Object Analysis")
 
     # Drill-down Filter
@@ -126,7 +126,7 @@ with st.container(border=True):
 
 # --- B. Condition Wordcloud ---
 # --- B. Condition Wordcloud ---
-with st.container(border=True):
+with st.container():
     st.subheader("Condition Wordcloud")
     st.caption("Visualizing most frequent words in `temuan.kondisi.lemma`")
     
@@ -224,7 +224,9 @@ with st.container(border=True):
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
                     showlegend=False,
-                    height=500
+                    height=500,
+                    font=dict(color="#00526A"), # Added font color
+                    title=dict(font=dict(color="#00526A")) # Added font color
                 ) 
                 
                 st.plotly_chart(fig_wc, use_container_width=True)
@@ -235,20 +237,22 @@ with st.container(border=True):
             st.info("No text data available for Wordcloud.")
 
 # --- C. Risk Category Matrix ---
-with st.container(border=True):
+with st.container():
     st.subheader("Risk Category Matrix (Role vs Category)")
     if 'team_role' in df_master_filtered.columns and 'temuan_kategori' in df_master_filtered.columns:
         df_matrix = df_master_filtered.groupby(['team_role', 'temuan_kategori']).size().reset_index(name='Count')
         
         fig_matrix = px.density_heatmap(df_matrix, x='temuan_kategori', y='team_role', z='Count', 
                                         color_continuous_scale='Blues',
-                                        title="<b>Risk Matrix</b><br><sup style='color:grey'>Heatmap of 'team_role' (Reporter) vs 'temuan_kategori'</sup>")
+                                        title="<b>Risk Matrix</b><br><sup style='color:#00526A'>Heatmap of 'team_role' (Reporter) vs 'temuan_kategori'</sup>")
         fig_matrix.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                                 font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
+                                 font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")),
+                                 xaxis=dict(color="#00526A"), # Added font color
+                                 yaxis=dict(color="#00526A")) # Added font color
         st.plotly_chart(fig_matrix, use_container_width=True)
 
 # --- D. Finding Details Table ---
-with st.container(border=True):
+with st.container():
     st.subheader("Finding Details")
     cols_to_show = ['tanggal', 'temuan_kategori', 'temuan.nama', 'temuan.kondisi.lemma', 'temuan.tempat', 'temuan_status']
     # Filter columns that actually exist

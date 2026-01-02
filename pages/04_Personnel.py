@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import folium
+from streamlit_folium import st_folium
 from utils import load_data, render_sidebar
 
 # Page Config
@@ -54,7 +56,7 @@ with c2:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # --- B. Productivity Scatter ---
-with st.container(border=True):
+with st.container():
     st.subheader("Productivity Matrix (Volume vs Activity)")
     
     if 'creator_name' in df_master_filtered.columns:
@@ -89,7 +91,7 @@ with st.container(border=True):
                                  size_max=40, # Make bubbles slightly larger
                                  color='Closing Rate',
                                  color_continuous_scale='Teal',
-                                 title="<b>Workload Analysis</b><br><sup style='color:grey'>X: Total Reports | Y: Active Open Findings | Color: Closing Rate % ((Total-Open)/Total)</sup>")
+                                 title="<b>Workload Analysis</b><br><sup style='color:#00526A'>X: Total Reports | Y: Active Open Findings | Color: Closing Rate %</sup>")
         
         # fig_scatter.update_traces(textposition='top center') # Removed
         fig_scatter.update_traces(marker=dict(opacity=0.7, line=dict(width=1, color='DarkSlateGrey')))
@@ -107,13 +109,14 @@ with st.container(border=True):
             )
             
         fig_scatter.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                                  font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
+                                  font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")),
+                                  xaxis=dict(color="#00526A"), yaxis=dict(color="#00526A"))
         st.plotly_chart(fig_scatter, use_container_width=True)
     else:
         st.info("No reporter data available.")
 
 # --- C. Personnel Detail ---
-with st.container(border=True):
+with st.container():
     st.subheader("Individual Detail")
     
     # --- Filters for Fast Finding ---
@@ -182,7 +185,7 @@ with st.container(border=True):
                 
                 fig_pie = px.pie(risk_counts, values='Count', names='Category',
                                  color='Category', color_discrete_map=color_map, hole=0.4,
-                                 title=f"<b>Risk Profile</b><br><sup style='color:grey'>Reports by Category</sup>")
+                                 title=f"<b>Risk Profile</b><br><sup style='color:#00526A'>Reports by Category</sup>")
                 fig_pie.update_layout(showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                                       font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
                 # Force text inside to save space
@@ -193,3 +196,35 @@ with st.container(border=True):
         with col_table:
             st.write(f"**Reports Submitted:** {df_person.shape[0]}")
             st.dataframe(df_person[['kode_temuan', 'tanggal', 'temuan_kategori', 'temuan_status']], use_container_width=True)
+            
+        # 3. Personal Activity Map
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.subheader("Activity Map")
+        
+        if 'lat' in df_person.columns and 'lon' in df_person.columns:
+            df_person_geo = df_person.dropna(subset=['lat', 'lon'])
+            
+            if not df_person_geo.empty:
+                center_lat = df_person_geo['lat'].mean()
+                center_lon = df_person_geo['lon'].mean()
+                
+                m_person = folium.Map(location=[center_lat, center_lon], zoom_start=15)
+                folium.TileLayer(
+                    tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg',
+                    attr='&copy; CNES, Distribution Airbus DS, &copy; Airbus DS, &copy; PlanetObserver | &copy; Stadia Maps',
+                    name='Stadia Satellite'
+                ).add_to(m_person)
+                
+                for _, row in df_person_geo.iterrows():
+                    folium.Marker(
+                        location=[row['lat'], row['lon']],
+                        popup=f"{row.get('temuan_kategori','-')}: {row.get('nama_lokasi','-')}",
+                        icon=folium.Icon(color='blue', icon='user')
+                    ).add_to(m_person)
+                
+                folium.LayerControl().add_to(m_person)
+                st_folium(m_person, height=400, width="100%")
+            else:
+                st.info(f"No spatial data found for {selected_reporter}.")
+        else:
+            st.warning("Spatial columns missing.")
