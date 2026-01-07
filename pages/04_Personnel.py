@@ -120,7 +120,6 @@ with st.container():
     st.subheader("Individual Detail")
     
     # --- Filters for Fast Finding ---
-    # Prepare unique lists
     roles_list = ["All"] + sorted(df_master_filtered['role'].dropna().unique().tolist()) if 'role' in df_master_filtered.columns else ["All"]
     teams_list = ["All"] + sorted(df_master_filtered['team_role'].dropna().unique().tolist()) if 'team_role' in df_master_filtered.columns else ["All"]
     
@@ -128,7 +127,7 @@ with st.container():
     sel_role = c_filt1.selectbox("Filter by Role:", roles_list)
     sel_team = c_filt2.selectbox("Filter by Team:", teams_list)
     
-    # Filter Logic
+    # Filter Logic for selection list
     df_reporters = df_master_filtered.copy()
     if sel_role != "All":
         df_reporters = df_reporters[df_reporters['role'] == sel_role]
@@ -140,14 +139,23 @@ with st.container():
     selected_reporter = st.selectbox("Select Personnel", options=reporters)
     
     if selected_reporter:
-        df_person = df_master_filtered[df_master_filtered['creator_name'] == selected_reporter]
+        # Data reported by this person
+        df_reported_by = df_master_filtered[df_master_filtered['creator_name'] == selected_reporter]
+        
+        # Data assigned to/closed by this person (using nama_pic)
+        closed_by_count = 0
+        if 'nama_pic' in df_master_filtered.columns:
+            # We count cases where they are the PIC and the status is Closed
+            df_closed_by = df_master_filtered[
+                (df_master_filtered['nama_pic'] == selected_reporter) & 
+                (df_master_filtered['temuan_status'].str.lower() == 'closed')
+            ]
+            closed_by_count = df_closed_by.shape[0]
         
         # 1. Header Info (Role & Team Role)
-        # Attempt to get role from the first row of this person
-        role = df_person['role'].iloc[0] if 'role' in df_person.columns else "Unknown Role"
-        team_role = df_person['team_role'].iloc[0] if 'team_role' in df_person.columns else "Unknown Team"
+        role = df_reported_by['role'].iloc[0] if 'role' in df_reported_by.columns else "Unknown Role"
+        team_role = df_reported_by['team_role'].iloc[0] if 'team_role' in df_reported_by.columns else "Unknown Team"
         
-        # Using columns for layout like the picture
         col_header, _ = st.columns([2, 1])
         with col_header:
             st.markdown(f"""
@@ -169,12 +177,10 @@ with st.container():
         col_chart, col_table = st.columns([1, 2])
         
         with col_chart:
-            # Risk Category Pie Chart for this person
-            if 'temuan_kategori' in df_person.columns:
-                risk_counts = df_person['temuan_kategori'].value_counts().reset_index()
+            if 'temuan_kategori' in df_reported_by.columns:
+                risk_counts = df_reported_by['temuan_kategori'].value_counts().reset_index()
                 risk_counts.columns = ['Category', 'Count']
                 
-                # Colors
                 color_map = {
                     'Near Miss': '#FF4B4B', 
                     'Unsafe Condition': '#FFAA00', 
@@ -185,46 +191,30 @@ with st.container():
                 
                 fig_pie = px.pie(risk_counts, values='Count', names='Category',
                                  color='Category', color_discrete_map=color_map, hole=0.4,
-                                 title=f"<b>Risk Profile</b><br><sup style='color:#00526A'>Reports by Category</sup>")
+                                 title=f"<b>Risk Profile</b><br><sup style='color:#00526A'>Reported Issues by Category</sup>")
                 fig_pie.update_layout(showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                                       font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
-                # Force text inside to save space
                 fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-                
                 st.plotly_chart(fig_pie, use_container_width=True)
                 
         with col_table:
-            st.write(f"**Reports Submitted:** {df_person.shape[0]}")
-            st.dataframe(df_person[['kode_temuan', 'tanggal', 'temuan_kategori', 'temuan_status']], use_container_width=True)
+            # DISPLAY UPDATED STATS
+            stat_c1, stat_c2 = st.columns(2)
+            with stat_c1:
+                st.markdown(f"""
+                    <div style="background: rgba(255,255,255,0.6); padding:10px; border-radius:10px; border: 1px solid #CBECF5; text-align:center;">
+                        <p style="margin:0; font-size:0.9rem; color:grey;">Reports Submitted</p>
+                        <h3 style="margin:0; color:#00526A;">{df_reported_by.shape[0]}</h3>
+                    </div>
+                """, unsafe_allow_html=True)
+            with stat_c2:
+                st.markdown(f"""
+                    <div style="background: rgba(255,255,255,0.6); padding:10px; border-radius:10px; border: 1px solid #CBECF5; text-align:center;">
+                        <p style="margin:0; font-size:0.9rem; color:grey;">Findings Closed (as PIC)</p>
+                        <h3 style="margin:0; color:#00526A;">{closed_by_count}</h3>
+                    </div>
+                """, unsafe_allow_html=True)
             
-        # 3. Personal Activity Map
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("Activity Map")
-        
-        if 'lat' in df_person.columns and 'lon' in df_person.columns:
-            df_person_geo = df_person.dropna(subset=['lat', 'lon'])
-            
-            if not df_person_geo.empty:
-                center_lat = df_person_geo['lat'].mean()
-                center_lon = df_person_geo['lon'].mean()
-                
-                m_person = folium.Map(location=[center_lat, center_lon], zoom_start=15)
-                folium.TileLayer(
-                    tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg',
-                    attr='&copy; CNES, Distribution Airbus DS, &copy; Airbus DS, &copy; PlanetObserver | &copy; Stadia Maps',
-                    name='Stadia Satellite'
-                ).add_to(m_person)
-                
-                for _, row in df_person_geo.iterrows():
-                    folium.Marker(
-                        location=[row['lat'], row['lon']],
-                        popup=f"{row.get('temuan_kategori','-')}: {row.get('nama_lokasi','-')}",
-                        icon=folium.Icon(color='blue', icon='user')
-                    ).add_to(m_person)
-                
-                folium.LayerControl().add_to(m_person)
-                st_folium(m_person, height=400, width="100%")
-            else:
-                st.info(f"No spatial data found for {selected_reporter}.")
-        else:
-            st.warning("Spatial columns missing.")
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.write("**Recent Reports Detail:**")
+            st.dataframe(df_reported_by[['kode_temuan', 'tanggal', 'temuan_kategori', 'temuan_status']].head(10), use_container_width=True)

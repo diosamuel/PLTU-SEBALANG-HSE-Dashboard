@@ -16,3 +16,7 @@ data/
 # Debug files
 # debug_*.py
 
+# Debug scripts
+debug_*.py
+temp_debug_merge.py
+test_folium.py

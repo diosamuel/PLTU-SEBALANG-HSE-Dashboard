@@ -85,6 +85,23 @@ def load_css():
     ::-webkit-scrollbar-thumb:hover {
         background: #555; 
     }
+    /* Filter Chips (Selected Options) */
+    span[data-baseweb="tag"] {
+        background-color: #00526A !important; /* Context: Primary Blue */
+        border: 1px solid #00526A !important;
+    }
+    
+    /* Text inside Filter Chips */
+    span[data-baseweb="tag"] span {
+        color: #FFFFFF !important;
+    }
+    
+    /* Remove Icon in Filter Chips */
+    span[data-baseweb="tag"] svg {
+        fill: #FFFFFF !important;
+        color: #FFFFFF !important;
+    }
+
     </style>
     """, unsafe_allow_html=True)
 
@@ -176,7 +193,10 @@ def render_sidebar(df_master, df_exploded):
     Also injects the global CSS.
     """
     load_css()
+    
+    # Reverted to Wikimedia Logo as requested
     st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/2/20/Logo_PLN.svg", width=100)
+        
     st.sidebar.title("HSE Filter")
 
     # Date Filter
