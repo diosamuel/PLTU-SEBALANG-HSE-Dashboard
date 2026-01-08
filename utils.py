@@ -128,6 +128,10 @@ def load_data():
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
 
+    # Filter out findings with "p2k3" in temuan.nama (Global Rule)
+    if 'temuan.nama' in df.columns:
+        df = df[~df['temuan.nama'].str.lower().str.contains('p2k3', na=False)]
+
     # Process Map Data
     if 'latlong' in df_map.columns:
         # Split and coerce to numeric, turning errors (like 'belt conveyor') into NaN

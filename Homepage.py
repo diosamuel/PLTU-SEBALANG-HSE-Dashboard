@@ -282,6 +282,47 @@ with st.container():
     else:
         st.info("Column 'temuan.nama' not found for object analysis.")
 
+# --- 8. Near Miss Alert ---
+st.subheader("Near Miss Alert")
+
+# KPI Calculation
+pending_high_risk = df_master_filtered[
+    (df_master_filtered['temuan_kategori'] == 'Near Miss') & 
+    (df_master_filtered['temuan_status'] == 'Open')
+].shape[0]
+
+# Layout: KPI Card (Left) vs Priority Table (Right)
+c_kpi, c_table = st.columns([1, 3])
+
+with c_kpi:
+    st.markdown(f"""
+    <div class="metric-card">
+        <h3>Pending Near Miss</h3>
+        <h2 style="color: #FF4B4B;">{pending_high_risk}</h2>
+        <p style="color:grey; font-size:0.8rem;">Open 'Near Miss' findings</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with c_table:
+    st.markdown("##### Near Miss Findings")
+    high_risk_df = df_master_filtered[df_master_filtered['temuan_kategori'] == 'Near Miss']
+
+    if not high_risk_df.empty:
+        # Columns: kode_temuan as first column, removed deadline_sla
+        cols_to_show = ['kode_temuan', 'tanggal', 'temuan.nama', 'temuan.kondisi.lemma', 'nama_lokasi', 'temuan_status']
+        # Filter valid columns
+        valid_cols = [c for c in cols_to_show if c in high_risk_df.columns]
+        
+        st.dataframe(
+            high_risk_df[valid_cols].head(20),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.success("No 'Near Miss' findings found in this filter selection.")
+
+st.markdown("<br><br>", unsafe_allow_html=True)
+
 # --- 9. Mini Heatmap (New Requirement) ---
 with st.container():
     st.subheader("Heatmaps (Folium)")
