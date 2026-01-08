@@ -12,7 +12,7 @@ st.set_page_config(page_title="Recommendations - HSE", page_icon=None, layout="w
 
 # Data Loading
 df_exploded, df_master, _ = load_data()
-df_master_filtered, df_exploded_filtered = render_sidebar(df_master, df_exploded)
+df_master_filtered, df_exploded_filtered, _ = render_sidebar(df_master, df_exploded)
 
 st.title("Recommendations & SLA")
 
@@ -150,8 +150,8 @@ with st.container():
     else:
         st.info("No data available.")
 
-# --- B. Execution KPIs ---
-st.subheader("Execution Performance")
+# --- B. Execution Performance (Split View) ---
+st.subheader("Near Miss Alert")
 
 # KPI Calculation
 pending_high_risk = df_master_filtered[
@@ -159,132 +159,34 @@ pending_high_risk = df_master_filtered[
     (df_master_filtered['temuan_status'] == 'Open')
 ].shape[0]
 
-overdue_count = 0
-if 'deadline_sla' in df_master_filtered.columns:
-    overdue_mask = (df_master_filtered['temuan_status'] == 'Open') & (pd.to_datetime('today') > df_master_filtered['deadline_sla'])
-    overdue_count = df_master_filtered[overdue_mask].shape[0]
+# Layout: KPI Card (Left) vs Priority Table (Right)
+c_kpi, c_table = st.columns([1, 3])
 
-avg_aging = 0
-if 'tanggal' in df_master_filtered.columns:
-    open_items = df_master_filtered[df_master_filtered['temuan_status'] == 'Open'].copy()
-    if not open_items.empty:
-        open_items['age'] = (pd.to_datetime('today') - open_items['tanggal']).dt.days
-        avg_aging = int(open_items['age'].mean())
-
-# Render KPIs using HTML Cards (White Background)
-c1, c2, c3 = st.columns(3)
-with c1:
+with c_kpi:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Pending High-Risk</h3>
+        <h3>Pending Near Miss</h3>
         <h2 style="color: #FF4B4B;">{pending_high_risk}</h2>
         <p style="color:grey; font-size:0.8rem;">Open 'Near Miss' findings</p>
     </div>
     """, unsafe_allow_html=True)
-with c2:
-    st.markdown(f"""
-    <div class="metric-card">
-        <h3>Overdue Findings</h3>
-        <h2>{overdue_count}</h2>
-        <p style="color:grey; font-size:0.8rem;">Open items past SLA</p>
-    </div>
-    """, unsafe_allow_html=True)
-with c3:
-    st.markdown(f"""
-    <div class="metric-card">
-        <h3>Avg. Aging</h3>
-        <h2>{avg_aging} Days</h2>
-        <p style="color:grey; font-size:0.8rem;">For Open findings</p>
-    </div>
-    """, unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
-
-# --- C. High Risk Priority Table---
-with st.container():
-    st.subheader("High-Risk Priority Actions")
+with c_table:
+    st.markdown("##### Near Miss Findings")
     high_risk_df = df_master_filtered[df_master_filtered['temuan_kategori'] == 'Near Miss']
 
     if not high_risk_df.empty:
+        # Columns: kode_temuan as first column, removed deadline_sla
+        cols_to_show = ['kode_temuan', 'tanggal', 'temuan.nama', 'temuan.kondisi.lemma', 'nama_lokasi', 'temuan_status']
+        # Filter valid columns
+        valid_cols = [c for c in cols_to_show if c in high_risk_df.columns]
+        
         st.dataframe(
-            high_risk_df[['tanggal', 'temuan.nama', 'temuan.kondisi.lemma', 'nama_lokasi', 'deadline_sla', 'temuan_status']].head(20),
-            use_container_width=True
+            high_risk_df[valid_cols].head(20),
+            use_container_width=True,
+            hide_index=True
         )
     else:
         st.success("No 'Near Miss' findings found in this filter selection.")
 
-# --- D. SLA per Department ---
-with st.container():
-    st.subheader("Department Performance")
-    
-    dept_col = 'team_role' if 'team_role' in df_master_filtered.columns else None
-    
-    if dept_col:
-        # 1. Calculate detailed breakdown
-        df_dept = df_master_filtered.groupby(dept_col).agg(
-            Total=('kode_temuan', 'nunique'),
-            Closed=('temuan_status', lambda x: (x.str.lower() == 'closed').sum())
-        ).reset_index()
-        
-        df_dept['Open'] = df_dept['Total'] - df_dept['Closed']
-        df_dept['Compliance%'] = (df_dept['Closed'] / df_dept['Total'] * 100).round(1)
-        
-        # Sort so highest volume is at the top
-        df_dept = df_dept.sort_values('Total', ascending=True)
-
-        # 2. Create Stacked Horizontal Bar Chart
-        fig_dept = go.Figure()
-
-        fig_dept.add_trace(go.Bar(
-            y=df_dept[dept_col],
-            x=df_dept['Closed'],
-            name='Closed',
-            orientation='h',
-            marker_color='#00526A',
-            # Adjust bar thickness via width (optional, bargap is usually better)
-            hovertemplate="<b>%{y}</b><br>Closed: %{x}<extra></extra>"
-        ))
-
-        fig_dept.add_trace(go.Bar(
-            y=df_dept[dept_col],
-            x=df_dept['Open'],
-            name='Open',
-            orientation='h',
-            marker_color='#FF4B4B',
-            hovertemplate="<b>%{y}</b><br>Open: %{x}<extra></extra>"
-        ))
-
-        # 3. Layout Styling: Control Gaps and Height
-        fig_dept.update_layout(
-            barmode='stack',
-            # bargap: defines the space between bars (0 to 1). 
-            # 0.4 or 0.5 creates a clear separation to prevent clumping.
-            bargap=0.5, 
-            title="<b>Department Performance Breakdown</b><br><sup style='color:#00526A'>Total Volume vs. Completion Status</sup>",
-            paper_bgcolor="rgba(0,0,0,0)", 
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#00526A"),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            yaxis=dict(title=None, color="#00526A", tickfont=dict(size=12)),
-            xaxis=dict(title="Number of Findings", color="#00526A", gridcolor='rgba(0,0,0,0.1)'),
-            # Increased height to give the thicker bars enough room
-            height=650, 
-            margin=dict(l=10, r=80, t=100, b=10) # Added right margin for labels
-        )
-
-        # 4. Annotations with descriptive labels
-        for i, row in df_dept.iterrows():
-            fig_dept.add_annotation(
-                x=row['Total'],
-                y=row[dept_col],
-                # Explicit label: "XX% Closed"
-                text=f" <b>{row['Compliance%']}% Closed</b>",
-                showarrow=False,
-                xanchor='left',
-                font=dict(size=11, color="#00526A")
-            )
-        
-        st.plotly_chart(fig_dept, use_container_width=True)
-    else:
-        st.info("Department data (team_role) not found.")
+st.markdown("<br><br>", unsafe_allow_html=True)

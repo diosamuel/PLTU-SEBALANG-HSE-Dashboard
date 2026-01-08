@@ -29,7 +29,7 @@ if df_master.empty:
 
 # --- 4. Sidebar Filters ---
 from utils import render_sidebar
-df_master_filtered, df_exploded_filtered = render_sidebar(df_master, df_exploded)
+df_master_filtered, df_exploded_filtered, granularity = render_sidebar(df_master, df_exploded)
 
 # --- 5. Header & Global Alerts ---
 st.title("HSE Executive Summary")
@@ -45,9 +45,24 @@ if not near_miss_open.empty:
     st.error(f"ALERT: There are {count_nm} OPEN Near Miss findings requiring immediate attention!")
 
 # --- 6. KPI Cards ---
-total_findings, closing_rate, mttr, participation = calculate_kpi(df_master_filtered)
+# Calculate Metrics
+total_findings = df_master_filtered['kode_temuan'].nunique()
 
-c1, c2, c3, c4 = st.columns(4)
+if 'temuan_status' in df_master_filtered.columns:
+    # Use case-insensitive matching for safety
+    status_lower = df_master_filtered['temuan_status'].astype(str).str.lower()
+    closed_findings = status_lower[status_lower == 'closed'].shape[0]
+    open_findings = status_lower[status_lower == 'open'].shape[0]
+else:
+    closed_findings = 0
+    open_findings = 0
+
+if total_findings > 0:
+    closing_rate = (closed_findings / total_findings) * 100
+else:
+    closing_rate = 0.0
+
+c1, c2, c3 = st.columns(3)
 
 with c1:
     st.markdown(f"""
@@ -61,27 +76,18 @@ with c1:
 with c2:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Closing Rate</h3>
-        <h2>{closing_rate:.1f}%</h2>
-        <p style="color:grey; font-size:0.8rem;">(Closed / Total) * 100.</p>
+        <h3>Open / Closed</h3>
+        <h2>{open_findings} / {closed_findings}</h2>
+        <p style="color:grey; font-size:0.8rem;">Active vs Resolved findings.</p>
     </div>
     """, unsafe_allow_html=True)
 
 with c3:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Avg Resolution</h3>
-        <h2>{mttr} Days</h2>
-        <p style="color:grey; font-size:0.8rem;">Mean Time To Resolve per Finding.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with c4:
-    st.markdown(f"""
-    <div class="metric-card">
-        <h3>Participation</h3>
-        <h2>{participation}</h2>
-        <p style="color:grey; font-size:0.8rem;">Active unique reporters.</p>
+        <h3>Closing Rate</h3>
+        <h2>{closing_rate:.1f}%</h2>
+        <p style="color:grey; font-size:0.8rem;">(Closed / Total) * 100.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -92,28 +98,37 @@ col_left, col_right = st.columns([2, 1])
 
 with col_left:
     with st.container():
-        st.subheader("Finding Trend (Monthly)")
+        st.subheader(f"Finding Trend ({granularity})")
         st.caption("Visualizes the volume of findings over time to identify seasonal trends or spikes.")
         
         # Breakdown Switch
         trend_mode = st.radio("View Mode:", ["Total Trend", "Breakdown by Category"], horizontal=True, label_visibility="collapsed")
         
+        # Determine frequency and label based on granularity
+        if granularity == 'Daily':
+            resample_freq = 'D'
+            period_freq = 'D'
+            time_label = 'Day'
+        else:
+            resample_freq = 'M'
+            period_freq = 'M'
+            time_label = 'Month'
+
         if 'tanggal' in df_master_filtered.columns:
             if trend_mode == "Total Trend":
-                df_trend = df_master_filtered.set_index('tanggal').resample('M')['kode_temuan'].nunique().reset_index()
+                df_trend = df_master_filtered.set_index('tanggal').resample(resample_freq)['kode_temuan'].nunique().reset_index()
                 fig_trend = px.line(df_trend, x='tanggal', y='kode_temuan', markers=True, 
                                     color_discrete_sequence=['#00526A'],
-                                    title="<b>Finding Trend (Total)</b><br><sup style='color:#00526A'>Count of unique 'kode_temuan' per Month</sup>")
+                                    title=f"<b>Finding Trend (Total)</b><br><sup style='color:#00526A'>Count of unique 'kode_temuan' per {time_label}</sup>")
             else:
                 # Breakdown by Category
-                # Must handle date resampling per group
                 if 'temuan_kategori' in df_master_filtered.columns:
                     # Create a period column for grouping
                     df_temp = df_master_filtered.copy()
-                    df_temp['Month'] = df_temp['tanggal'].dt.to_period('M').dt.to_timestamp()
+                    df_temp['Period'] = df_temp['tanggal'].dt.to_period(period_freq).dt.to_timestamp()
                     
-                    df_trend = df_temp.groupby(['Month', 'temuan_kategori'])['kode_temuan'].nunique().reset_index()
-                    df_trend.rename(columns={'Month': 'tanggal', 'kode_temuan': 'Count'}, inplace=True)
+                    df_trend = df_temp.groupby(['Period', 'temuan_kategori'])['kode_temuan'].nunique().reset_index()
+                    df_trend.rename(columns={'Period': 'tanggal', 'kode_temuan': 'Count'}, inplace=True)
                     
                     # Define colors specific for this chart or reuse global map if accessible
                     trend_colors = {
@@ -126,7 +141,7 @@ with col_left:
                     
                     fig_trend = px.line(df_trend, x='tanggal', y='Count', color='temuan_kategori', markers=True,
                                         color_discrete_map=trend_colors,
-                                        title="<b>Finding Trend (Breakdown)</b><br><sup style='color:#00526A'>Count per Category per Month</sup>")
+                                        title=f"<b>Finding Trend (Breakdown)</b><br><sup style='color:#00526A'>Count per Category per {time_label}</sup>")
                 else:
                     st.warning("Category column missing.")
                     df_trend = pd.DataFrame() # Fallback
@@ -240,11 +255,15 @@ with st.container():
                     df_trend_filtered = pd.DataFrame() # Empty if nothing selected
                 
                 if not df_trend_filtered.empty:
-                    # Resample by Month and Object
-                    df_trend_filtered['Month'] = pd.to_datetime(df_trend_filtered['tanggal']).dt.to_period('M').dt.to_timestamp()
-                    df_line_data = df_trend_filtered.groupby(['Month', 'temuan.nama']).size().reset_index(name='Count')
+                    # Determine frequency based on granularity
+                    # Re-evaluating here in case scope is separate
+                    freq_alias = 'D' if granularity == 'Daily' else 'M'
                     
-                    fig_line_top = px.line(df_line_data, x='Month', y='Count', color='temuan.nama', markers=True,
+                    # Resample by Period (Month or Day) and Object
+                    df_trend_filtered['Period'] = pd.to_datetime(df_trend_filtered['tanggal']).dt.to_period(freq_alias).dt.to_timestamp()
+                    df_line_data = df_trend_filtered.groupby(['Period', 'temuan.nama']).size().reset_index(name='Count')
+                    
+                    fig_line_top = px.line(df_line_data, x='Period', y='Count', color='temuan.nama', markers=True,
                                             color_discrete_sequence=px.colors.qualitative.Prism,
                                             title=None)
                     

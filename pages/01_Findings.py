@@ -14,7 +14,7 @@ st.set_page_config(page_title="Findings Analysis - HSE", page_icon=None, layout=
 
 # Data Loading
 df_exploded, df_master, _ = load_data()
-df_master_filtered, df_exploded_filtered = render_sidebar(df_master, df_exploded)
+df_master_filtered, df_exploded_filtered, _ = render_sidebar(df_master, df_exploded)
 
 st.title("Findings Analysis")
 
@@ -153,163 +153,152 @@ with st.container():
             else:
                 st.info("No data for Pareto chart.")
 
-# --- B. Condition Wordcloud ---
+# --- B. Condition Wordcloud (Split: Adjectives & Nouns) ---
 with st.container():
     st.subheader("Condition Wordcloud")
-    st.caption("Visualizing most frequent words in `temuan.kondisi.lemma`")
+    st.caption("Visualizing most frequent words (Dummy Data: Adjectives vs Nouns)")
     
-    # Limit Control
-    wc_limit_options = [50, 100, 200]
-    max_wc_words = st.selectbox("Max Words:", wc_limit_options, index=1) # Default 100
+    # Text Processing & Plotting Function (Reusable - Interactive & Compact)
+    def render_wordcloud_interactive(frequency_dict, color_cmap='Blues', title=""):
+        try:
+            # Generate Layout with compact settings
+            # We use a larger canvas to ensure high resolution positioning, 
+            # then map it to the plotly coordinates.
+            wc = WordCloud(width=600, height=400, background_color=None, mode="RGBA",
+                          prefer_horizontal=1.0, # All Horizontal for compactness
+                          relative_scaling=0.5,
+                          margin=2, 
+                          min_font_size=10, max_font_size=80, # Adjusted for Plotly scaling
+                          colormap=color_cmap 
+                          ).generate_from_frequencies(frequency_dict)
+            
+            # Extract coordinates for Plotly
+            word_list = []
+            freq_list = []
+            fontsize_list = []
+            position_x_list = []
+            position_y_list = []
+            colors_list = []
+            
+            import matplotlib.colors as mcolors
+            import matplotlib.cm as cm
+            
+            # Re-generate colors to match the cmap strictly
+            counts = list(frequency_dict.values())
+            if not counts: return go.Figure()
+            max_c = max(counts)
+            min_c = min(counts)
+            norm = mcolors.Normalize(vmin=min_c, vmax=max_c)
+            cmap = cm.get_cmap(color_cmap)
 
-    if 'temuan.kondisi.lemma' in df_exploded_filtered.columns:
-        text_data = " ".join(df_exploded_filtered['temuan.kondisi.lemma'].dropna().astype(str).tolist())
+            for item in wc.layout_:
+                if len(item) < 3: continue
+                # Unpack varying tuple lengths
+                if len(item) == 5:
+                    (word, fontsize, position, orientation, color) = item
+                elif len(item) == 6:
+                    (word, _, fontsize, position, orientation, color) = item
+                else: continue
+                
+                if isinstance(word, tuple): word = word[0]
+                word = str(word).strip("('),")
+                
+                if position is None: continue
+                
+                freq = frequency_dict.get(word, 0)
+                
+                # Append data
+                word_list.append(word)
+                freq_list.append(freq)
+                fontsize_list.append(fontsize) # Plotly matches this reasonably well
+                position_x_list.append(position[1])
+                position_y_list.append(400 - position[0]) # Flip Y-axis
+                
+                # Manually map color to ensure consistency with cmap
+                colors_list.append(mcolors.to_hex(cmap(0.4 + (norm(freq) * 0.6))))
+
+            # Plotly Scatter
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=position_x_list, y=position_y_list,
+                text=word_list,
+                mode='text',
+                textfont=dict(size=fontsize_list, family="Source Sans Pro, sans-serif", color=colors_list),
+                hoverinfo='text',
+                hovertext=[f"{w}: {f}" for w, f in zip(word_list, freq_list)]
+            ))
+
+            # Add Colorbar Legend
+            fig.add_trace(go.Scatter(
+                x=[None], y=[None],
+                mode='markers',
+                marker=dict(
+                    colorscale=color_cmap, 
+                    showscale=True,
+                    cmin=min_c, cmax=max_c,
+                    color=[min_c, max_c],
+                    colorbar=dict(
+                        title="Frequency",
+                        titleside="right",
+                        thickness=15,
+                        len=0.7,
+                        titlefont=dict(color="#00526A", size=12),
+                        tickfont=dict(color="#00526A", size=10)
+                    )
+                ),
+                hoverinfo='none',
+                showlegend=False
+            ))
+            
+            fig.update_layout(
+                xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 600]),
+                yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 400]),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                showlegend=False,
+                height=400,
+                margin=dict(t=10, b=10, l=10, r=10)
+            )
+            return fig
+
+        except Exception as e:
+            st.error(f"Error generating wordcloud: {e}")
+            return go.Figure()
+
+    # --- Dummy Data ---
+    kata_sifat_data = {
+        'Rusak': 120, 'Bocor': 90, 'Putus': 85, 'Kotor': 70, 
+        'Retak': 65, 'Panas': 60, 'Licin': 55, 'Longgar': 50,
+        'Korosif': 45, 'Hilang': 40, 'Miring': 35, 'Aus': 30,
+        'Terbuka': 25, 'Pecah': 20, 'Tersumbat': 15
+    }
+    
+    kata_benda_data = {
+        'Kabel': 150, 'Pipa': 110, 'Valve': 95, 'Trafo': 80,
+        'Motor': 75, 'Pompa': 70, 'Panel': 65, 'Tangga': 60,
+        'Lampu': 55, 'Sensor': 50, 'Baut': 45, 'Oli': 40,
+        'Helm': 35, 'Sepatu': 30, 'Sarung Tangan': 25
+    }
+    
+    # --- Layout ---
+    wc_col1, wc_col2 = st.columns(2)
+    
+    with wc_col1:
+        st.markdown("##### Kata Sifat (Adjectives)")
+        fig_sifat = render_wordcloud_interactive(kata_sifat_data, 'Reds')
+        st.plotly_chart(fig_sifat, use_container_width=True)
         
-        if text_data.strip():
-            try:
-                # 1. Aesthetics: Stopwords & Layout
-                stopwords = set([
-                    'dan', 'di', 'yang', 'dengan', 'ada', 'tidak', 'pada', 'untuk', 'ke', 'dari', 
-                    'ini', 'itu', 'atau', 'dapat', 'sudah', 'juga', 'karena', 'oleh', 'namun', 
-                    'sebagai', 'serta', 'bisa', 'akan', 'return', 'temu', 'tindak', 'lanjut', 
-                    'kondisi', 'temuan', 'area', 'lokasi', 'tempat' # Context-specific generic words
-                ])
-                
-                # 2. Calculate Layout using WordCloud library
-                stopwords.update(["undefined", "nan", "null", "-", "_"]) # Safety against bad data strings
-                
-                # prefer_horizontal=0.9 makes it mostly horizontal (neater). 
-                # scale=2 gives higher resolution for collision detection.
-                wc = WordCloud(width=800, height=450, background_color=None, mode="RGBA",
-                              max_words=max_wc_words, stopwords=stopwords,
-                              prefer_horizontal=0.9, relative_scaling=0.5,
-                              min_font_size=10, max_font_size=100
-                              ).generate(text_data)
-                
-                # 3. Extract coordinates and words
-                word_list = []
-                freq_list = []
-                fontsize_list = []
-                
-                # Calculate raw counts for tooltip
-                from collections import Counter
-                words_clean = [w for w in text_data.split() if w.lower() not in stopwords]
-                word_counts = Counter(words_clean)
-                
-                position_x_list = []
-                position_y_list = []
-                
-                # Color Mapping Logic (Frequency Based)
-                import matplotlib.colors as mcolors
-                import matplotlib.cm as cm
-                
-                # Prepare data for coloring
-                colors_mapped = []
-                
-                # First pass: collect valid items
-                items_processed = []
-                for item in wc.layout_:
-                    if len(item) < 3: continue # Safety
-                    
-                    # Handle varying unpacking depending on version
-                    if len(item) == 5:
-                        (word, fontsize, position, orientation, color) = item
-                    elif len(item) == 6:
-                        (word, _, fontsize, position, orientation, color) = item
-                    else: continue
+    with wc_col2:
+        st.markdown("##### Kata Benda (Nouns)")
+        fig_benda = render_wordcloud_interactive(kata_benda_data, 'Blues')
+        st.plotly_chart(fig_benda, use_container_width=True)
 
-                    if isinstance(word, tuple): word = word[0]
-                    word = str(word).strip("('),")
-                    
-                    if position is None: continue
-                    
-                    count = word_counts.get(word, 0)
-                    items_processed.append({
-                        'word': word,
-                        'count': count,
-                        'fontsize': fontsize,
-                        'x': position[1],
-                        'y': 450 - position[0]
-                    })
-                
-                if items_processed:
-                    # Normalization for coloring
-                    counts = [x['count'] for x in items_processed]
-                    max_c = max(counts) if counts else 1
-                    min_c = min(counts) if counts else 0
-                    norm = mcolors.Normalize(vmin=min_c, vmax=max_c)
-                    cmap = cm.get_cmap('Blues') # Use Blues colormap
-                    
-                    # Generate lists for Plotly
-                    word_list = [x['word'] for x in items_processed]
-                    freq_list = [x['count'] for x in items_processed]
-                    fontsize_list = [x['fontsize'] for x in items_processed]
-                    position_x_list = [x['x'] for x in items_processed]
-                    position_y_list = [x['y'] for x in items_processed]
-                    
-                    # Map colors (Skip very light start of Blues to ensure visibility)
-                    # We map 0.3 to 1.0 of the Blues scale
-                    color_list = [mcolors.to_hex(cmap(0.4 + (norm(c) * 0.6))) for c in freq_list]
-
-                    # 3. Create Plotly Scatter
-                    fig_wc = go.Figure()
-                    
-                    # Main Text Trace
-                    fig_wc.add_trace(go.Scatter(
-                        x=position_x_list,
-                        y=position_y_list,
-                        text=word_list,
-                        mode='text',
-                        textfont=dict(
-                            size=fontsize_list,
-                            family="Source Sans Pro, sans-serif",
-                            color=color_list
-                        ),
-                        hoverinfo='text',
-                        hovertext=[f"Word: {w}<br>Count: {f}" for w, f in zip(word_list, freq_list)],
-                        showlegend=False
-                    ))
-                    
-                    # Dummy Trace for Colorbar Legend
-                    fig_wc.add_trace(go.Scatter(
-                        x=[None], y=[None],
-                        mode='markers',
-                        marker=dict(
-                            colorscale='Blues', 
-                            showscale=True,
-                            cmin=min_c, cmax=max_c,
-                            color=[min_c, max_c], # Dummy data range
-                            colorbar=dict(
-                                title="Frequency",
-                                titlefont=dict(color="#00526A"),
-                                tickfont=dict(color="#00526A"),
-                                len=0.8
-                            )
-                        ),
-                        hoverinfo='none',
-                        showlegend=False
-                    ))
-                    
-                    fig_wc.update_layout(
-                        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
-                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        showlegend=False,
-                        height=500,
-                        font=dict(color="#00526A"), 
-                        title_text="", 
-                        margin=dict(t=20, b=20, l=20, r=20)
-                    ) 
-                    
-                    st.plotly_chart(fig_wc, use_container_width=True)
-                else:
-                     st.info("No valid words generated.")
-                
-            except Exception as e:
-                st.warning(f"Could not generate interactive wordcloud: {e}")
-        else:
-            st.info("No text data available for Wordcloud.")
+# --- OLD WORDCLOUD CODE FROZEN BELOW ---
+# """
+#     if 'temuan.kondisi.lemma' in df_exploded_filtered.columns:
+#         text_data = " ".join(df_exploded_filtered['temuan.kondisi.lemma'].dropna().astype(str).tolist())
+#         ... (Original Logic Frozen) ...
+# """
 
 # --- C. Risk Category Matrix ---
 with st.container():
@@ -319,13 +308,15 @@ with st.container():
         # 1. Create the base matrix
         df_matrix = df_master_filtered.groupby(['team_role', 'temuan_kategori']).size().reset_index(name='Count')
         
-        # 2. Define a scale where the absolute bottom (0) is transparent.
-        # We start the visible color at a very small offset (0.0001) 
-        # so that only true zeros/empty cells are hidden.
+        # 2. View Options
+        c_view, _ = st.columns([1, 2])
+        matrix_view = c_view.radio("View Layout:", ["Scrollable", "Fit to Screen"], horizontal=True, label_visibility="collapsed")
+        
+        # 3. Define Scale
         custom_scale = [
-            [0.0, 'rgba(0,0,0,0)'],       # Fully Transparent for zero
-            [0.0001, '#96B3D2'],          # Start visible blue immediately after zero
-            [1.0, '#00526A']              # Dark blue for the maximum count
+            [0.0, 'rgba(0,0,0,0)'],       
+            [0.0001, '#96B3D2'],          
+            [1.0, '#00526A']              
         ]
         
         fig_matrix = px.density_heatmap(
@@ -339,14 +330,73 @@ with st.container():
         fig_matrix.update_layout(
             paper_bgcolor="rgba(0,0,0,0)", 
             plot_bgcolor="rgba(0,0,0,0)", 
-            margin=dict(t=10, l=10, r=10, b=10),
+            margin=dict(t=30, l=150, r=10, b=30), # Increased left margin for labels
             font=dict(color="#00526A")
         )
-        
-        # 3. Add gaps to clearly define the cells that DO have data
+        # Add gaps
         fig_matrix.update_traces(xgap=3, ygap=3)
-        
-        st.plotly_chart(fig_matrix, use_container_width=True)
+
+        if matrix_view == "Scrollable":
+            # Split Layout: Scrollable Chart vs Fixed Legend
+            c_scroll, c_fixed = st.columns([6, 1])
+            
+            with c_scroll:
+                # Dynamic height calculation
+                unique_roles = df_matrix['team_role'].nunique()
+                # 40px per row, min 400px
+                dynamic_height = max(400, unique_roles * 40)
+                
+                # Hide legend on the main scrolling chart
+                fig_matrix.update_traces(showscale=False)
+                fig_matrix.update_layout(
+                    height=dynamic_height,
+                    yaxis=dict(autorange="reversed", automargin=True),
+                    margin=dict(r=10), # Reduce right margin since legend is gone
+                    coloraxis_showscale=False # Explicitly hide colorbar if managed by coloraxis
+                )
+                
+                import streamlit.components.v1 as components
+                html_code = fig_matrix.to_html(include_plotlyjs='cdn', full_html=False)
+                components.html(html_code, height=450, scrolling=True)
+            
+            with c_fixed:
+                # Fixed Legend (Dummy Plot)
+                z_max = df_matrix['Count'].max() if not df_matrix.empty else 1
+                
+                fig_legend = go.Figure()
+                fig_legend.add_trace(go.Scatter(
+                    x=[None], y=[None],
+                    mode='markers',
+                    marker=dict(
+                        colorscale=custom_scale,
+                        showscale=True,
+                        cmin=0, cmax=z_max,
+                        color=[0, z_max],
+                        colorbar=dict(
+                            title="Count",
+                            titleside="right",
+                            thickness=15,
+                            len=0.8,
+                            titlefont=dict(color="#00526A", size=12),
+                            tickfont=dict(color="#00526A", size=10)
+                        )
+                    ),
+                    hoverinfo='none'
+                ))
+                fig_legend.update_layout(
+                    xaxis=dict(visible=False), 
+                    yaxis=dict(visible=False),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    height=450, 
+                    margin=dict(t=20, b=20, l=0, r=40)
+                )
+                st.plotly_chart(fig_legend, use_container_width=True)
+            
+        else:
+            # Fit to screen (default standard)
+            fig_matrix.update_layout(yaxis=dict(automargin=True))
+            st.plotly_chart(fig_matrix, use_container_width=True)
 # --- D. Finding Details Table ---
 with st.container():
     st.subheader("Finding Details")

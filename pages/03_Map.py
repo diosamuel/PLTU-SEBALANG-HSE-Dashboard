@@ -10,7 +10,7 @@ st.set_page_config(page_title="Spatial Analysis - HSE", layout="wide")
 
 # Data Loading
 df_exploded, df_master, df_map = load_data()
-df_master_filtered, _ = render_sidebar(df_master, df_exploded)
+df_master_filtered, _, _ = render_sidebar(df_master, df_exploded)
 
 st.title("Spatial Risk Analysis")
 
@@ -65,6 +65,7 @@ with col_map:
                     kategori = row.get('temuan_kategori', '-')
                     parent = row.get('temuan.nama.parent', '-')
                     child = row.get('temuan.nama', '-')
+                    kondisi = row.get('temuan.kondisi', row.get('temuan.kondisi.lemma', '-'))
                     location = row.get('nama_lokasi', '-')
                     status = row.get('temuan_status', 'Unknown')
                     
@@ -74,6 +75,7 @@ with col_map:
                         <b>Status:</b> {status}<br>
                         <b>Temuan Nama Parent:</b> {parent}<br>
                         <b>Temuan Nama Child:</b> {child}<br>
+                        <b>Temuan Kondisi:</b> {kondisi}<br>
                         <b>Temuan Location:</b> {location}
                     </div>
                     """
@@ -84,6 +86,31 @@ with col_map:
                         icon=folium.Icon(color=get_color(kategori), icon='info-sign')
                     ).add_to(marker_cluster)
                 
+                # --- ADD LEGEND (MacroElement) ---
+                from branca.element import Template, MacroElement
+                
+                legend_template = """
+                {% macro html(this, kwargs) %}
+                <div id='maplegend' class='maplegend' 
+                    style='position: absolute; z-index:9999; background-color: rgba(255, 255, 255, 0.85);
+                        border-radius: 8px; padding: 10px; font-size: 12px; bottom: 30px; left: 30px; 
+                        border: 1px solid grey; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); font-family: sans-serif;'>
+                    <div class='legend-title' style='font-weight: bold; margin-bottom: 5px; font-size: 14px;'>Risk Level (Pins & Heat)</div>
+                    <div class='legend-scale'>
+                    <ul class='legend-labels' style='list-style: none; padding: 0; margin: 0;'>
+                        <li style='margin-bottom: 5px;'><span style='background:#FF4B4B; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Near Miss (Critical)</li>
+                        <li style='margin-bottom: 5px;'><span style='background:#E67E22; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Unsafe Action (High)</li>
+                        <li style='margin-bottom: 5px;'><span style='background:#FFAA00; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Unsafe Condition (Medium)</li>
+                        <li style='margin-bottom: 5px;'><span style='background:#00526A; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Positive (Low)</li>
+                    </ul>
+                    </div>
+                </div>
+                {% endmacro %}
+                """
+                macro = MacroElement()
+                macro._template = Template(legend_template)
+                m.get_root().add_child(macro)
+
                 folium.LayerControl().add_to(m)
                 st.session_state[map_key] = m
 
@@ -96,5 +123,5 @@ with col_map:
 with col_details:
     st.markdown("### Top Lokasi Temuan")
     if 'nama_lokasi' in df_master_filtered.columns:
-        top_locs = df_master_filtered.groupby('nama_lokasi')['kode_temuan'].nunique().sort_values(ascending=False).head(20)
-        st.dataframe(top_locs)
+        top_locs = df_master_filtered.groupby('nama_lokasi')['kode_temuan'].nunique().sort_values(ascending=False).head(20).reset_index(name='Count of Findings')
+        st.dataframe(top_locs, hide_index=True, use_container_width=True)

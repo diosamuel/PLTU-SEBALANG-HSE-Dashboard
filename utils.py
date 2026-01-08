@@ -221,6 +221,8 @@ def render_sidebar(df_master, df_exploded):
         max_value=max_date
     )
 
+    granularity = st.sidebar.radio("Granularity", ["Monthly", "Daily"], horizontal=True)
+
     start_date, end_date = date_range if len(date_range) == 2 else (min_date, max_date)
 
     # Apply Date Filter
@@ -265,4 +267,4 @@ def render_sidebar(df_master, df_exploded):
     else:
         df_exploded_filtered = pd.DataFrame(columns=df_exploded.columns)
             
-    return df_master_filtered, df_exploded_filtered
+    return df_master_filtered, df_exploded_filtered, granularity
