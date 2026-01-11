@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from utils import load_data, calculate_kpi, filter_by_date
+from utils import load_data, calculate_kpi, filter_by_date, HSE_COLOR_MAP
 from datetime import datetime, timedelta
 import folium
 from streamlit_folium import st_folium
@@ -10,7 +10,7 @@ from folium.plugins import HeatMap
 
 # --- 1. Page Configuration ---
 st.set_page_config(
-    page_title="HSSE Executive Summary",
+    page_title="Ringkasan Eksekutif HSSE",
     page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded"
@@ -24,7 +24,7 @@ st.set_page_config(
 df_exploded, df_master, df_map = load_data()
 
 if df_master.empty:
-    st.error("Data could not be loaded. Please check the data path.")
+    st.error("Data tidak dapat dimuat. Silakan periksa path data.")
     st.stop()
 
 # --- 4. Sidebar Filters ---
@@ -32,7 +32,7 @@ from utils import render_sidebar, set_header_title
 df_master_filtered, df_exploded_filtered, granularity = render_sidebar(df_master, df_exploded)
 
 # --- 5. Header & Global Alerts ---
-set_header_title("HSSE Executive Summary")
+set_header_title("Ringkasan Eksekutif HSSE")
 
 
 # Global Alert for Open Near Miss
@@ -43,7 +43,7 @@ near_miss_open = df_master_filtered[
 
 if not near_miss_open.empty:
     count_nm = near_miss_open.shape[0]
-    st.error(f"ALERT: There are {count_nm} OPEN Near Miss findings requiring immediate attention!")
+    st.error(f"PERINGATAN: Ada {count_nm} temuan 'Near Miss' berstatus OPEN yang memerlukan perhatian segera!")
 
 # --- 6. KPI Cards ---
 # Calculate Metrics
@@ -73,9 +73,9 @@ c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Total Findings</h3>
+        <h3>Total Temuan</h3>
         <h2>{total_findings}</h2>
-        <p style="color:grey; font-size:0.8rem;">Unique 'kode_temuan' count.</p>
+        <p style="color:grey; font-size:0.8rem;">Jumlah unik 'kode_temuan'.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -84,16 +84,16 @@ with c2:
     <div class="metric-card">
         <h3>Open / Closed</h3>
         <h2>{open_findings} / {closed_findings}</h2>
-        <p style="color:grey; font-size:0.8rem;">Active vs Resolved findings.</p>
+        <p style="color:grey; font-size:0.8rem;">Temuan Aktif vs Selesai.</p>
     </div>
     """, unsafe_allow_html=True)
 
 with c3:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Closing Rate</h3>
+        <h3>Laju Penyelesaian</h3>
         <h2>{closing_rate:.1f}%</h2>
-        <p style="color:grey; font-size:0.8rem;">(Closed / Total) * 100.</p>
+        <p style="color:grey; font-size:0.8rem;">(Selesai / Total) * 100.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -102,7 +102,7 @@ with c4:
     <div class="metric-card">
         <h3>Pending Near Miss</h3>
         <h2 style="color: #FF4B4B;">{pending_near_miss}</h2>
-        <p style="color:grey; font-size:0.8rem;">Open 'Near Miss' findings</p>
+        <p style="color:grey; font-size:0.8rem;">Temuan 'Near Miss' Open</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -113,28 +113,28 @@ col_left, col_right = st.columns([2, 1])
 
 with col_left:
     with st.container():
-        st.subheader(f"Finding Trend ({granularity})")
-        st.caption("Visualizes the volume of findings over time to identify seasonal trends or spikes.")
+        st.subheader(f"Tren Temuan ({granularity})")
+        st.caption("Visualisasi volume temuan dari waktu ke waktu untuk mengidentifikasi tren atau lonjakan.")
         
         # Breakdown Switch
-        trend_mode = st.radio("View Mode:", ["Total Trend", "Breakdown by Category"], horizontal=True, label_visibility="collapsed")
+        trend_mode = st.radio("Mode Tampilan:", ["Tren Total", "Rincian per Kategori"], horizontal=True, label_visibility="collapsed")
         
         # Determine frequency and label based on granularity
         if granularity == 'Weekly':
             resample_freq = 'W'
             period_freq = 'W'
-            time_label = 'Week'
+            time_label = 'Minggu'
         else:
             resample_freq = 'M'
             period_freq = 'M'
-            time_label = 'Month'
+            time_label = 'Bulan'
 
         if 'tanggal' in df_master_filtered.columns:
-            if trend_mode == "Total Trend":
+            if trend_mode == "Tren Total":
                 df_trend = df_master_filtered.set_index('tanggal').resample(resample_freq)['kode_temuan'].nunique().reset_index()
                 fig_trend = px.line(df_trend, x='tanggal', y='kode_temuan', markers=True, 
                                     color_discrete_sequence=['black'],
-                                    title=f"<b>Finding Trend (Total)</b><br><sup style='color:#00526A'>Count of unique 'kode_temuan' per {time_label}</sup>")
+                                    title=f"<b>Tren Temuan (Total)</b><br><sup style='color:#00526A'>Jumlah unik 'kode_temuan' per {time_label}</sup>")
                 
                 # Force show all x-axis labels
                 if granularity == 'Weekly':
@@ -151,18 +151,11 @@ with col_left:
                     df_trend = df_temp.groupby(['Period', 'temuan_kategori'])['kode_temuan'].nunique().reset_index()
                     df_trend.rename(columns={'Period': 'tanggal', 'kode_temuan': 'Count'}, inplace=True)
                     
-                    # Define colors specific for this chart or reuse global map if accessible
-                    trend_colors = {
-                        'Near Miss': '#FF4B4B',
-                        'Unsafe Condition': '#FFAA00',
-                        'Unsafe Action': '#E67E22',
-                        'Positive': '#00526A',
-                        'Safe': '#00526A' 
-                    }
+                    # Use GLOBAL HSE_COLOR_MAP
                     
                     fig_trend = px.line(df_trend, x='tanggal', y='Count', color='temuan_kategori', markers=True,
-                                        color_discrete_map=trend_colors,
-                                        title=f"<b>Finding Trend (Breakdown)</b><br><sup style='color:#00526A'>Count per Category per {time_label}</sup>")
+                                        color_discrete_map=HSE_COLOR_MAP,
+                                        title=f"<b>Tren Temuan (Rincian)</b><br><sup style='color:#00526A'>Jumlah per Kategori per {time_label}</sup>")
                     
                     # Force show all x-axis labels
                     if granularity == 'Weekly':
@@ -170,7 +163,7 @@ with col_left:
                     else:
                          fig_trend.update_xaxes(dtick="M1", tickformat="%b %Y")
                 else:
-                    st.warning("Category column missing.")
+                    st.warning("Kolom kategori hilang.")
                     df_trend = pd.DataFrame() # Fallback
             
             if 'fig_trend' in locals():
@@ -178,30 +171,24 @@ with col_left:
                                         font=dict(color="#00526A"), 
                                         title=dict(font=dict(color="#00526A")),
                                         xaxis=dict(title=None),
-                                        yaxis=dict(title="Count"),
+                                        yaxis=dict(title="Jumlah"),
                                         height=280, # Compact Height
                                         margin=dict(l=0, r=0, t=30, b=0))
                 st.plotly_chart(fig_trend, use_container_width=True)
 
 with col_right:
     with st.container():
-        st.subheader("Risk Distribution")
-        st.caption("Breakdown of findings by Risk Category.")
+        st.subheader("Distribusi Risiko")
+        st.caption("Rincian temuan berdasarkan Kategori Risiko.")
         if 'temuan_kategori' in df_master_filtered.columns:
             df_risk = df_master_filtered['temuan_kategori'].value_counts().reset_index()
             df_risk.columns = ['Category', 'Count']
             
             # Define colors
-            color_map = {
-                'Near Miss': '#FF4B4B', # Red
-                'Unsafe Condition': '#FFAA00', # Orange
-                'Unsafe Action': '#E67E22', # Dark Orange for differentiation
-                'Positive': '#00526A', # PLN Dark Blue
-            }
             
             fig_pie = px.pie(df_risk, values='Count', names='Category', 
-                            color='Category', color_discrete_map=color_map, hole=0.4,
-                            title="<b>Risk Distribution</b><br><sup style='color:#00526A'>Proportion of 'temuan_kategori'</sup>")
+                            color='Category', color_discrete_map=HSE_COLOR_MAP, hole=0.4,
+                            title="<b>Distribusi Risiko</b><br><sup style='color:#00526A'>Proporsi 'temuan_kategori'</sup>")
             fig_pie.update_traces(textinfo='percent+value', texttemplate='%{value}<br>(%{percent})')
             fig_pie.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                   font=dict(color="#00526A"), 
@@ -217,12 +204,12 @@ if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exp
     col_bar, col_line = st.columns([1, 1])
     
     with col_bar:
-        st.subheader("Top Recuring Issues (Object)")
-        st.caption("Identifies the most frequently reported objects.")
+        st.subheader("Isu Berulang Teratas (Objek)")
+        st.caption("Mengidentifikasi objek yang paling sering dilaporkan.")
         
     with col_line:
-        st.subheader("Trend of Recurring Issues")
-        st.caption("Volume trend of selected objects over time.")
+        st.subheader("Tren Isu Berulang")
+        st.caption("Tren volume objek tertentu dari waktu ke waktu.")
 
     with col_bar:
         # Group by Object AND Category to show category context
@@ -234,15 +221,10 @@ if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exp
             sorted_objects = object_totals['Object'].tolist()
             
             # Define colors (Same as Risk Distribution)
-            color_map = {
-                'Near Miss': '#FF4B4B', # Red
-                'Unsafe Condition': '#FFAA00', # Orange
-                'Unsafe Action': '#E67E22', # Dark Orange
-                'Positive': '#00526A', # PLN Dark Blue
-            }
+            color_map = HSE_COLOR_MAP
             
             # Filter limit
-            limit_mode = st.radio("Show:", ["Top 10", "All"], horizontal=True, key="bar_limit", label_visibility="collapsed")
+            limit_mode = st.radio("Tampilkan:", ["Top 10", "Semua"], horizontal=True, key="bar_limit", label_visibility="collapsed")
             if limit_mode == "Top 10":
                 top_10_names = sorted_objects[:10]
                 top_objects_plot = top_objects[top_objects['Object'].isin(top_10_names)]
@@ -278,7 +260,7 @@ if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exp
                 xaxis=dict(
                     range=range_x, 
                     side="top", 
-                    title="Count", # Added Title
+                    title="Jumlah", # Added Title
                     color="#00526A",
                     showgrid=False
                 ),
@@ -366,14 +348,14 @@ if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exp
         
         # Multiselect Filter
         selected_trend_objects = st.multiselect(
-            "Select Objects to Filter:",
+            "Pilih Objek untuk Difilter:",
             options=all_object_names,
             default=top_5_names,
             label_visibility="collapsed"
         )
         
         # View Mode Switch
-        trend_view_mode = st.radio("View Mode:", ["Total Trend", "Category Breakdown"], horizontal=True, key="trend_view_recurring", label_visibility="collapsed")
+        trend_view_mode = st.radio("Mode Tampilan:", ["Tren Total", "Rincian Kategori"], horizontal=True, key="trend_view_recurring", label_visibility="collapsed")
         
         # Filter Data based on Selection
         if 'tanggal' in df_exploded_filtered.columns:
@@ -390,7 +372,7 @@ if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exp
                 # Resample by Period (Month or Day) and Object
                 df_trend_filtered['Period'] = pd.to_datetime(df_trend_filtered['tanggal']).dt.to_period(freq_alias).dt.to_timestamp()
                 
-                if trend_view_mode == "Category Breakdown":
+                if trend_view_mode == "Rincian Kategori":
                     # Merge category info for legend
                     df_obj_cat = df_exploded_filtered[['temuan.nama', 'temuan_kategori']].drop_duplicates(subset=['temuan.nama'])
                     df_trend_filtered = df_trend_filtered.merge(df_obj_cat, on='temuan.nama', suffixes=('', '_y'))
@@ -403,6 +385,7 @@ if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exp
                     df_line_data = df_trend_filtered.groupby(['Period', 'temuan.nama']).size().reset_index(name='Count')
                     color_col = 'temuan.nama'
                 
+                # Use qualitative colors or custom if needed
                 fig_line_top = px.line(df_line_data, x='Period', y='Count', color=color_col, markers=True,
                                         color_discrete_sequence=px.colors.qualitative.Prism,
                                         title=None)
@@ -410,15 +393,15 @@ if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exp
                 fig_line_top.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                             font=dict(color="#00526A"),
                                             xaxis=dict(title=None, color="#00526A"),
-                                            yaxis=dict(title="Count", color="#00526A"),
+                                            yaxis=dict(title="Jumlah", color="#00526A"),
                                             height=280, # Compact Height
                                             margin=dict(l=0, r=0, t=0, b=0),
                                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
                 st.plotly_chart(fig_line_top, use_container_width=True)
             else:
-                st.info("No objects selected or no data available.")
+                st.info("Tidak ada objek yang dipilih atau data tidak tersedia.")
         else:
-                st.info("Date data missing for trend analysis.")
+                st.info("Data tanggal hilang untuk analisis tren.")
 
     
 else:
@@ -429,8 +412,8 @@ st.markdown("<div style='margin-top: -30px;'></div>", unsafe_allow_html=True) # 
 col_nm, col_map = st.columns([1, 1])
 
 with col_nm:
-    st.subheader("Near Miss Findings")
-    st.caption("High-priority near misses requiring immediate attention.")
+    st.subheader("Temuan Near Miss ")
+    st.caption("Temuan 'Near Miss' prioritas tinggi yang membutuhkan perhatian segera.")
     high_risk_df = df_master_filtered[df_master_filtered['temuan_kategori'] == 'Near Miss']
 
     if not high_risk_df.empty:
@@ -446,11 +429,11 @@ with col_nm:
             height=280 # Compact Height
         )
     else:
-        st.success("No 'Near Miss' findings found in this filter selection.")
+        st.success("Tidak ada temuan 'Near Miss' dalam seleksi filter ini.")
 
 with col_map:
-    st.subheader("Heatmaps (Folium)")
-    st.caption("Spatial intensity of findings.")
+    st.subheader("Peta Panas (Folium)")
+    st.caption("Intensitas spasial temuan.")
     # st.caption("Intensity of findings based on location frequency.")
     
     if 'lat' in df_master_filtered.columns and 'lon' in df_master_filtered.columns:
@@ -502,7 +485,7 @@ with col_map:
             # Height 280 to match table
             st_folium(st.session_state[map_key], height=280, width="100%", returned_objects=[])
         else:
-            st.info("No spatial data available for heatmap.")
+            st.info("Data spasial tidak tersedia untuk heatmap.")
     else:
-        st.warning("Latitude/Longitude data missing.")
+        st.warning("Data Latitude/Longitude hilang.")
 

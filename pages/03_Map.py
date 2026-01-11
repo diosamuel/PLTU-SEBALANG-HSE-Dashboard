@@ -3,15 +3,15 @@ import pandas as pd
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster, HeatMap
-from utils import load_data, render_sidebar, set_header_title
+from utils import load_data, render_sidebar, set_header_title, HSE_COLOR_MAP
 
 # Page Config
-st.set_page_config(page_title="Risk Map & Spatial Analysis", layout="wide")
+st.set_page_config(page_title="Peta Risiko & Analisis Spasial", layout="wide")
 
 # Data Loading
 df_exploded, df_master, df_map = load_data()
 df_master_filtered, _, _ = render_sidebar(df_master, df_exploded)
-set_header_title("Spatial Risk Analysis")
+set_header_title("Analisis Risiko Spasial")
 
 
 
@@ -42,24 +42,24 @@ with col_map:
                 # --- CATEGORY-MATCHED HEATMAP ---
                 # Gradient mapping: 0.2 (Positive), 0.4 (Action), 0.6 (Condition), 1.0 (Near Miss)
                 custom_gradient = {
-                    0.2: '#00526A', # Positive
-                    0.4: '#E67E22', # Unsafe Action
-                    0.6: '#FFAA00', # Unsafe Condition
-                    1.0: '#FF4B4B'  # Near Miss
+                    0.2: HSE_COLOR_MAP['Positive'],         # #1B5E20
+                    0.4: HSE_COLOR_MAP['Unsafe Action'],    # #B71C1C
+                    0.6: HSE_COLOR_MAP['Unsafe Condition'], # #F57F17
+                    1.0: HSE_COLOR_MAP['Near Miss']         # #1A237E
                 }
                 
                 heat_data = [[row['lat'], row['lon']] for index, row in df_geo.iterrows()]
-                HeatMap(heat_data, radius=18, blur=12, gradient=custom_gradient, name='Risk Heatmap').add_to(m)
+                HeatMap(heat_data, radius=18, blur=12, gradient=custom_gradient, name='Peta Panas Risiko').add_to(m)
                 
                 # Marker Cluster for clickability
-                marker_cluster = MarkerCluster(name='All Findings').add_to(m)
+                marker_cluster = MarkerCluster(name='Semua Temuan').add_to(m)
                 
                 def get_color(category):
                     cat_lower = str(category).lower()
-                    if 'near miss' in cat_lower: return 'red'
-                    if 'unsafe condition' in cat_lower: return 'beige' # Folium 'beige' is close to Orange
-                    if 'unsafe action' in cat_lower: return 'orange'
-                    if 'positive' in cat_lower: return 'blue'
+                    if 'near miss' in cat_lower: return 'darkblue'      # #1A237E -> darkblue
+                    if 'unsafe condition' in cat_lower: return 'orange' # #F57F17 -> orange
+                    if 'unsafe action' in cat_lower: return 'red'       # #B71C1C -> red/darkred
+                    if 'positive' in cat_lower: return 'darkgreen'      # #1B5E20 -> darkgreen
                     return 'cadetblue' 
                 
                 for _, row in df_pins.iterrows():
@@ -90,23 +90,23 @@ with col_map:
                 # --- ADD LEGEND (MacroElement) ---
                 from branca.element import Template, MacroElement
                 
-                legend_template = """
-                {% macro html(this, kwargs) %}
+                legend_template = f"""
+                {{% macro html(this, kwargs) %}}
                 <div id='maplegend' class='maplegend' 
                     style='position: absolute; z-index:9999; background-color: rgba(255, 255, 255, 0.85);
                         border-radius: 8px; padding: 10px; font-size: 12px; bottom: 30px; left: 30px; 
                         border: 1px solid grey; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); font-family: sans-serif;'>
-                    <div class='legend-title' style='font-weight: bold; margin-bottom: 5px; font-size: 14px;'>Temuan Kategori (Pins & Heat)</div>
+                    <div class='legend-title' style='font-weight: bold; margin-bottom: 5px; font-size: 14px;'>Kategori Temuan (Pin & Heat)</div>
                     <div class='legend-scale'>
                     <ul class='legend-labels' style='list-style: none; padding: 0; margin: 0;'>
-                        <li style='margin-bottom: 5px;'><span style='background:#FF4B4B; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Near Miss</li>
-                        <li style='margin-bottom: 5px;'><span style='background:#E67E22; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Unsafe Action</li>
-                        <li style='margin-bottom: 5px;'><span style='background:#FFAA00; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Unsafe Condition</li>
-                        <li style='margin-bottom: 5px;'><span style='background:#00526A; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Positive</li>
+                        <li style='margin-bottom: 5px;'><span style='background:{HSE_COLOR_MAP['Near Miss']}; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Near Miss</li>
+                        <li style='margin-bottom: 5px;'><span style='background:{HSE_COLOR_MAP['Unsafe Action']}; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Unsafe Action</li>
+                        <li style='margin-bottom: 5px;'><span style='background:{HSE_COLOR_MAP['Unsafe Condition']}; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Unsafe Condition</li>
+                        <li style='margin-bottom: 5px;'><span style='background:{HSE_COLOR_MAP['Positive']}; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Positive</li>
                     </ul>
                     </div>
                 </div>
-                {% endmacro %}
+                {{% endmacro %}}
                 """
                 macro = MacroElement()
                 macro._template = Template(legend_template)
@@ -115,14 +115,14 @@ with col_map:
                 folium.LayerControl().add_to(m)
                 st.session_state[map_key] = m
 
-            st_folium(st.session_state[map_key], width="100%", height=500, returned_objects=[])
+            st_folium(st.session_state[map_key], width="100%", height=600, returned_objects=[])
         else:
-            st.warning("No coordinate matches found for filtered data.")
+            st.warning("Tidak ada kecocokan koordinat untuk data yang difilter.")
     else:
-        st.warning("Spatial data fields (lat/lon) missing.")
+        st.warning("Field data spasial (lat/lon) hilang.")
 
 with col_details:
-    st.markdown("### Top Lokasi Temuan")
+    st.markdown("### Lokasi Temuan Teratas")
     if 'nama_lokasi' in df_master_filtered.columns:
         top_locs = df_master_filtered.groupby('nama_lokasi')['kode_temuan'].nunique().sort_values(ascending=False).head(20).reset_index(name='Count of Findings')
         st.dataframe(top_locs, hide_index=True, use_container_width=True)

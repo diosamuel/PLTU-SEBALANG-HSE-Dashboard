@@ -4,10 +4,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
-from utils import load_data, render_sidebar, set_header_title
+from utils import load_data, render_sidebar, set_header_title, HSE_COLOR_MAP
 
 # Page Config
-st.set_page_config(page_title="Findings Analysis", page_icon=None, layout="wide")
+st.set_page_config(page_title="Analisis Temuan", page_icon=None, layout="wide")
 
 # Styling
 # Loaded via utils.render_sidebar()
@@ -15,12 +15,12 @@ st.set_page_config(page_title="Findings Analysis", page_icon=None, layout="wide"
 # Data Loading
 df_exploded, df_master, _ = load_data()
 df_master_filtered, df_exploded_filtered, _ = render_sidebar(df_master, df_exploded)
-set_header_title("Findings Analysis")
+set_header_title("Analisis Temuan")
 
 
 
 # --- Tabs for Compact Layout ---
-tab1, tab2, tab3 = st.tabs(["Object Analysis", "Condition Wordcloud", "Risk Flow"])
+tab1, tab2, tab3 = st.tabs(["Analisis Objek", "Analisis Kondisi", "Alur Kategori Temuan"])
 
 # --- A. Object Analysis (Pareto/Treemap) ---
 with tab1:
@@ -35,149 +35,183 @@ with tab1:
     ]
 
     # --- COMPACT CONTROLS ROW ---
-    c_drill, c_viz, c_check, c_limit = st.columns([1.5, 1.2, 1, 1])
+    c_drill, c_limit, c_check = st.columns([1.5, 1, 1])
     
     # Col 1: Drill-down
-    selected_parent = "All"
+    selected_parent = "Semua"
     with c_drill:
         if 'temuan.nama.parent' in df_exploded_filtered.columns:
-            parent_options = ["All"] + sorted(df_exploded_filtered['temuan.nama.parent'].dropna().astype(str).unique())
-            selected_parent = st.selectbox("Drill-down by Category (Parent):", parent_options)
+            parent_options = ["Semua"] + sorted(df_exploded_filtered['temuan.nama.parent'].dropna().astype(str).unique())
+            selected_parent = st.selectbox("Filter per Kategori (Parent):", parent_options)
             
-    # Col 2: Viz Type
-    with c_viz:
-         viz_type = st.radio("Visualization Type:", ["Treemap", "Pareto Chart"], horizontal=True)
+    # Col 2: Limit
+    with c_limit:
+        limit_options = [10, 20, 50, "Semua"]
+        max_items = st.selectbox("Tampilkan N Objek Teratas:", limit_options, index=1)
 
-    # Col 3: Breakdown Checkbox (Only for Treemap)
+    # Col 3: Breakdown Checkbox (For Treemap)
     with c_check:
         st.write("") # Spacer for alignment
         st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
-        breakdown_cat = st.checkbox("Breakdown by Category?", value=False) if viz_type == "Treemap" else False
+        breakdown_cat = st.checkbox("Rincian per Kategori (Treemap)?", value=False)
         
-    # Col 4: Limit
-    with c_limit:
-        limit_options = [10, 20, 50, "All"]
-        max_items = st.selectbox("Show Top N Objects:", limit_options, index=1)
-
     if 'temuan.nama' in df_exploded_filtered.columns:
-        # Filter data based on selection
-        if selected_parent != "All":
+        # Filter data based on selection (Shared for both charts)
+        if selected_parent != "Semua":
             df_analysis = df_exploded_filtered[df_exploded_filtered['temuan.nama.parent'] == selected_parent]
         else:
             df_analysis = df_exploded_filtered
 
-        if viz_type == "Treemap":
-            if 'temuan.nama.parent' in df_analysis.columns:
-                target_cols = ['temuan.nama.parent', 'temuan.nama']
-                if breakdown_cat and 'temuan_kategori' in df_analysis.columns:
-                     target_cols.append('temuan_kategori')
-                
-                path = [px.Constant("All Categories")] + target_cols
-                df_obj = df_analysis.groupby(target_cols).size().reset_index(name='Count')
-                
-                if max_items != "All":
-                   top_parents = df_obj.groupby('temuan.nama.parent')['Count'].sum().nlargest(max_items).index
-                   df_obj = df_obj[df_obj['temuan.nama.parent'].isin(top_parents)]
-            else:
-                path = ['Object']
-                df_obj = df_analysis['temuan.nama'].value_counts().reset_index()
-                df_obj.columns = ['Object', 'Count']
-                if max_items != "All":
-                    df_obj = df_obj.head(max_items)
-            
-            # --- MODIFIED: Unified Color Strategy ---
-            # Both views now use the Blue Gradient ('custom_scale') based on 'Count'
-            color_params = dict(color='Count', color_continuous_scale=custom_scale)
+        # --- CHART LAYOUT (Side-by-Side) ---
+        col_pareto, col_treemap = st.columns(2)
 
-            fig = px.treemap(
-                df_obj, 
-                path=path, 
-                values='Count', 
-                **color_params,
-                # Depth 3 shows the extra category layer, Depth 2 stays at Object level
-                maxdepth=3 if breakdown_cat else 2, 
-                title="<b>Object Hierarchy</b><br><sup style='color:grey'>Showing Parent Categories. Click a box to see specific objects.</sup>"
-            )
-            
-            # --- KEEPING LABELS (Important) ---
-            fig.update_traces(
-                root_color="white", 
-                marker_line_width=2,
-                marker_line_color="white",
-                textfont=dict(
-                    size=18,        # Large labels
-                    color="white"   # White text for contrast
-                ),
-                texttemplate="<b>%{label}</b><br>Count: %{value}",
-                hovertemplate="<b>%{label}</b><br>Findings: %{value}<extra></extra>"
-            )
-
-            fig.update_layout(
-                height=500, 
-                margin=dict(t=70, l=10, r=10, b=10), 
-                paper_bgcolor="rgba(0,0,0,0)", 
-                plot_bgcolor="rgba(0,0,0,0)",
-                coloraxis_showscale=True # Shows the gradient legend
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        else: # Pareto
+            # --- 1. PARETO CHART (Left) ---
+        with col_pareto:
             # Dynamic Column Selection:
             # - If "All" selected -> Analyze Parent Categories (temuan.nama.parent)
             # - If "Specific Parent" selected -> Analyze Objects (temuan.nama)
             
             col_analysis = 'temuan.nama' # Default
-            if selected_parent == "All" and 'temuan.nama.parent' in df_analysis.columns:
+            if selected_parent == "Semua" and 'temuan.nama.parent' in df_analysis.columns:
                 col_analysis = 'temuan.nama.parent'
-                chart_title = "<b>Top Issue Categories</b><br><sup style='color:grey'>Pareto Analysis of 'temuan.nama.parent'</sup>"
+                chart_title = "<b>Kategori Isu Teratas</b><br><sup style='color:grey'>Mengidentifikasi jenis temuan yang menyebabkan mayoritas masalah (Prinsip 80/20).</sup>"
             else:
                 col_analysis = 'temuan.nama'
-                chart_title = f"<b>Top Objects in '{selected_parent}'</b><br><sup style='color:grey'>Pareto Analysis of 'temuan.nama'</sup>"
+                chart_title = f"<b>Objek Teratas dalam '{selected_parent}'</b><br><sup style='color:grey'>Fokus pada objek yang paling sering muncul dalam kategori ini.</sup>"
 
-            df_obj = df_analysis[col_analysis].value_counts().reset_index()
-            df_obj.columns = ['Object', 'Count']
+            df_obj_pareto = df_analysis[col_analysis].value_counts().reset_index()
+            df_obj_pareto.columns = ['Object', 'Count']
             
-            if not df_obj.empty:
-                df_obj['Cumulative Percentage'] = df_obj['Count'].cumsum() / df_obj['Count'].sum() * 100
+            if not df_obj_pareto.empty:
+                df_obj_pareto['Cumulative Percentage'] = df_obj_pareto['Count'].cumsum() / df_obj_pareto['Count'].sum() * 100
                 
-                # Apply Limit for display (Pareto usually shows Top N anyway, but now user controls it)
-                if max_items != "All":
-                    df_plot = df_obj.head(max_items)
+                # Apply Limit
+                if max_items != "Semua":
+                    df_plot = df_obj_pareto.head(max_items)
                 else:
-                    df_plot = df_obj
+                    df_plot = df_obj_pareto
                 
                 from plotly.subplots import make_subplots
                 import plotly.graph_objects as go
                 
-                fig = make_subplots(specs=[[{"secondary_y": True}]])
+                fig_pareto = make_subplots(specs=[[{"secondary_y": True}]])
                 
                 # Bar Trace (Count)
-                fig.add_trace(
+                fig_pareto.add_trace(
                     go.Bar(x=df_plot['Object'], y=df_plot['Count'], 
-                           name="Frequency", marker_color='#00526A'),
+                           name="Frequency", marker_color='#00526A',
+                           text=df_plot['Count'], textposition='outside'),
                     secondary_y=False
                 )
                 
                 # Line Trace (Cumulative %)
-                fig.add_trace(
+                fig_pareto.add_trace(
                     go.Scatter(x=df_plot['Object'], y=df_plot['Cumulative Percentage'], 
-                               name="Cumulative %", mode='lines+markers', line=dict(color='#FF4B4B')),
+                               name="Cumulative %", mode='lines+markers', 
+                               line=dict(color='#FF4B4B')),
                     secondary_y=True
                 )
                 
-                fig.update_layout(
+                # Annotations for Line Trace (to ensure readability on top of bars)
+                annotations = []
+                for index, row in df_plot.iterrows():
+                    # Stagger labels to prevent overlap
+                    # Even indices: standard height
+                    # Odd indices: shifted higher
+                    y_offset = 10 if index % 2 == 0 else 30
+                    
+                    annotations.append(dict(
+                        x=row['Object'], 
+                        y=row['Cumulative Percentage'],
+                        text=f"{row['Cumulative Percentage']:.1f}%",
+                        showarrow=False,
+                        yshift=y_offset,
+                        font=dict(color='#FF4B4B', size=9), # Slightly smaller font
+                        bgcolor="rgba(255,255,255,0.9)", # More opaque background
+                        bordercolor="#FF4B4B",
+                        borderwidth=1,
+                        borderpad=2
+                    ))
+
+                fig_pareto.update_layout(
                     title=dict(text=chart_title, font=dict(color="#00526A")),
                     showlegend=True,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#00526A"),
-                    yaxis=dict(title="Frequency", gridcolor='rgba(0,0,0,0.1)'),
-                    yaxis2=dict(title="Cumulative %", range=[0, 110], showgrid=False)
+                    yaxis=dict(title="Jumlah", gridcolor='rgba(0,0,0,0.1)'), # Frequency -> Jumlah
+                    yaxis2=dict(title="Persentase Kumulatif (%)", range=[0, 115], showgrid=False), # Cumulative %
+                    height=500,
+                    margin=dict(t=80, l=10, r=10, b=10) # Increased top margin for title
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                
+                # Add annotations to the secondary y-axis context if needed, 
+                # but standard layout annotations work on the plot area. 
+                # We need to map yref to 'y2' for the line values.
+                for ann in annotations:
+                    ann['xref'] = 'x'
+                    ann['yref'] = 'y2'
+                    fig_pareto.add_annotation(ann)
+                st.plotly_chart(fig_pareto, use_container_width=True)
             else:
-                st.info("No data for Pareto chart.")
+                st.info("Tidak ada data untuk Analisis Pareto.")
+
+        # --- 2. TREEMAP CHART (Right) ---
+        with col_treemap:
+            # Treemap Logic
+            if 'temuan.nama.parent' in df_analysis.columns:
+                target_cols = ['temuan.nama.parent', 'temuan.nama']
+                if breakdown_cat and 'temuan_kategori' in df_analysis.columns:
+                     target_cols.append('temuan_kategori')
+                
+                path = [px.Constant("Semua Kategori")] + target_cols
+                df_obj_tree = df_analysis.groupby(target_cols).size().reset_index(name='Count')
+                
+                if max_items != "Semua":
+                   top_parents = df_obj_tree.groupby('temuan.nama.parent')['Count'].sum().nlargest(max_items).index
+                   df_obj_tree = df_obj_tree[df_obj_tree['temuan.nama.parent'].isin(top_parents)]
+            else:
+                path = ['Object']
+                df_obj_tree = df_analysis['temuan.nama'].value_counts().reset_index()
+                df_obj_tree.columns = ['Object', 'Count']
+                if max_items != "Semua":
+                    df_obj_tree = df_obj_tree.head(max_items)
+            
+            # Color Strategy
+            if breakdown_cat:
+                 color_params = dict(color='temuan_kategori', color_discrete_map=HSE_COLOR_MAP)
+            else:
+                 color_params = dict(color='Count', color_continuous_scale=custom_scale)
+
+            fig_tree = px.treemap(
+                df_obj_tree, 
+                path=path, 
+                values='Count', 
+                **color_params,
+                maxdepth=3 if breakdown_cat else 2, 
+                title="<b>Hirarki Objek</b><br><sup style='color:grey'>Visualisasi proporsi volume temuan. Blok lebih besar = Lebih banyak temuan.</sup>"
+            )
+            
+            # Styling
+            fig_tree.update_traces(
+                root_color="white", 
+                marker_line_width=2,
+                marker_line_color="white",
+                textfont=dict(size=18, color="white"),
+                texttemplate="<b>%{label}</b><br>%{value}",
+                hovertemplate="<b>%{label}</b><br>Findings: %{value}<extra></extra>"
+            )
+
+            fig_tree.update_layout(
+                height=500, 
+                margin=dict(t=80, l=10, r=10, b=10), # Aligned with Pareto
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)",
+                coloraxis_showscale=False # Clean look
+            )
+            
+            st.plotly_chart(fig_tree, use_container_width=True)
 
 # --- B. Condition Wordcloud (Split: Adjectives & Nouns) ---
 with tab2:
@@ -288,7 +322,7 @@ with tab2:
             return fig
 
         except Exception as e:
-            st.error(f"Error generating wordcloud: {e}")
+            st.error(f"Gagal membuat wordcloud: {e}")
             return go.Figure()
 
     # --- Dummy Data ---
@@ -310,13 +344,25 @@ with tab2:
     wc_col1, wc_col2 = st.columns(2)
     
     with wc_col1:
-        st.markdown("##### Kata Sifat (Adjectives)")
+        # st.markdown("##### Kata Sifat (Adjectives)")
         fig_sifat = render_wordcloud_interactive(kata_sifat_data, 'Reds')
+        
+        # Add Title & Description (Consistent with Tab 1)
+        fig_sifat.update_layout(
+            title="<b>Kata Sifat (Adjectives)</b><br><sup style='color:grey'>Kata deskriptif yang paling sering muncul yang menunjukkan sifat temuan.</sup>",
+            margin=dict(t=80, l=10, r=10, b=10)
+        )
         st.plotly_chart(fig_sifat, use_container_width=True)
         
     with wc_col2:
-        st.markdown("##### Kata Benda (Nouns)")
+        # st.markdown("##### Kata Benda (Nouns)")
         fig_benda = render_wordcloud_interactive(kata_benda_data, 'Blues')
+        
+        # Add Title & Description
+        fig_benda.update_layout(
+             title="<b>Kata Benda (Nouns)</b><br><sup style='color:grey'>Objek atau komponen umum yang disebutkan dalam temuan.</sup>",
+             margin=dict(t=80, l=10, r=10, b=10)
+        )
         st.plotly_chart(fig_benda, use_container_width=True)
 
 # --- OLD WORDCLOUD CODE FROZEN BELOW ---
@@ -342,7 +388,7 @@ with tab3:
         
         # Limit Control
         limit_options = [10, 20, 50, "All"]
-        max_items = st.selectbox("Limit Flows/Nodes (Top N):", limit_options, index=0) # Default 10
+        max_items = st.selectbox("Batasi Alur/Node (N Teratas):", limit_options, index=0) # Default 10
         
         if len(cols) >= 2:
             df_sankey = df_exploded_filtered[cols].dropna().copy()
@@ -370,15 +416,11 @@ with tab3:
             label_map = {label: i for i, label in enumerate(unique_labels)}
             
             # --- COLOR MAPPING ---
-            # Colors matching Homepage Risk Distribution
-            color_map = {
-                'Near Miss': '#FF4B4B',        # Red
-                'Unsafe Condition': '#FFAA00', # Orange
-                'Unsafe Action': '#E67E22',    # Dark Orange
-                'Positive': '#00526A',         # PLN Blue
-                'Safe': '#00526A',
-                'Others': '#B0BEC5'            # Grey for "Others"
-            }
+            # Colors matching Global HSE Palette
+            color_map = HSE_COLOR_MAP.copy()
+            color_map['Safe'] = HSE_COLOR_MAP['Positive']
+            color_map['Others'] = '#B0BEC5' # Grey for "Others"
+            
             # Default color for objects/places
             default_node_color = "#00526A"
             
@@ -406,6 +448,17 @@ with tab3:
             value = []
             link_colors = []
             
+            # Helper: Map Parent -> Category for flow coloring
+            # df_sankey is already filtered. We can map each unique Parent to its dominant Category.
+            parent_to_cat_map = {}
+            if len(cols) > 1:
+                # Group by Parent (cols[1]), take most frequent Category (cols[0])
+                try:
+                    p_to_c = df_sankey.groupby(cols[1])[cols[0]].agg(lambda x: x.mode()[0])
+                    parent_to_cat_map = p_to_c.to_dict()
+                except Exception:
+                    pass
+
             for i in range(len(cols) - 1):
                 src_col = cols[i]
                 tgt_col = cols[i+1]
@@ -419,17 +472,40 @@ with tab3:
                     target.append(tgt_idx)
                     value.append(row['Count'])
                     
-                    # Determine Link Color based on Source Node
+                    # Determine Link Color based on Origin Category
                     src_label = row[src_col]
-                    if src_label in color_map:
-                        base_color = color_map[src_label]
-                    elif src_label == 'Others':
+                    origin_cat = src_label
+                    
+                    # If source is a Parent node (Middle layer), look up its Category
+                    if src_col == cols[1]:
+                        origin_cat = parent_to_cat_map.get(src_label, src_label)
+                    
+                    if origin_cat in color_map:
+                        base_color = color_map[origin_cat]
+                    elif origin_cat == 'Others':
                         base_color = color_map['Others']
                     else:
                         base_color = default_node_color
                     
                     link_colors.append(hex_to_rgba(base_color, 0.4))
             
+            # Calculate Node Totals for Labels
+            node_values = {i: 0 for i in range(len(unique_labels))}
+            # Sum max flow for each node to represent throughput
+            # Since In == Out (mostly), we can sum incoming links for targets and outgoing for sources?
+            # Actually, standard Sankey logic: Value = max(total_in, total_out)
+            node_in = {i: 0 for i in range(len(unique_labels))}
+            node_out = {i: 0 for i in range(len(unique_labels))}
+            
+            for s, t, v in zip(source, target, value):
+                node_out[s] += v
+                node_in[t] += v
+                
+            formatted_labels = []
+            for i, label in enumerate(unique_labels):
+                val = max(node_in[i], node_out[i])
+                formatted_labels.append(f"<b>{label}</b>: {val}")
+
             # 4. Render
             fig_sankey = go.Figure(data=[go.Sankey(
                 textfont = dict(color="#00526A", size=12, family="Source Sans Pro"),
@@ -437,21 +513,21 @@ with tab3:
                 pad = 15,
                 thickness = 20,
                 line = dict(color = "white", width = 0.5),
-                label = unique_labels,
-                color = node_colors # Applied dynamic colors
+                label = formatted_labels, # Labels with counts
+                color = node_colors 
                 ),
                 link = dict(
                 source = source,
                 target = target,
                 value = value,
-                color = link_colors # Dynamic Link Colors
+                color = link_colors
                 )
             )])
             
             flow_desc = " → ".join([c.replace('temuan.', '').replace('_', ' ').title() for c in cols])
             
             fig_sankey.update_layout(
-                title=dict(text=f"<b>Risk Flow Analysis</b><br><sup style='color:#00526A'>Flow: {flow_desc}</sup>", font=dict(color="#00526A")),
+                title=dict(text=f"<b>Analisis Alur Kategori Temuan</b><br><sup style='color:grey'>Melacak pergerakan temuan dari Kategori ke Objek ke Lokasi.</sup><br><sup style='color:#00526A'>Alur: {flow_desc}</sup>", font=dict(color="#00526A")),
                 paper_bgcolor="rgba(0,0,0,0)", 
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#00526A"),
@@ -459,8 +535,8 @@ with tab3:
             )
             st.plotly_chart(fig_sankey, use_container_width=True)
         else:
-            st.warning("Not enough data columns available for Sankey flow.")
+            st.warning("Kolom data tidak cukup untuk alur Sankey.")
     else:
-        st.info("No data available.")
+        st.info("Tidak ada data tersedia.")
 
 st.markdown("<br>", unsafe_allow_html=True)

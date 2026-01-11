@@ -7,6 +7,14 @@ from datetime import datetime
 DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/IZAT RAPIH - Experiment Ketiga.csv')
 MAP_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/map_izat.csv')
 
+# --- GLOBAL COLOR PALETTE (High Contrast) ---
+HSE_COLOR_MAP = {
+    "Positive": "#1B5E20",         # Deep Emerald Green (Safe/Success)
+    "Unsafe Action": "#B71C1C",    # Crimson Red (High Urgency/Danger)
+    "Unsafe Condition": "#F57F17", # Amber/Golden-Yellow (Caution - visible on light blue)
+    "Near Miss": "#1A237E"         # Deep Indigo (Critical/Close Call)
+}
+
 def load_css():
     st.markdown("""
     <style>
@@ -265,7 +273,7 @@ def render_sidebar(df_master, df_exploded):
     # Reverted to Wikimedia Logo as requested
     st.sidebar.image("https://kehatitenayan.web.id/static/media/PLN-NP.a8c9cf3c76844681aca8.png", width=200)
         
-    st.sidebar.title("HSE Filter")
+    st.sidebar.title("Filter HSE")
 
     # Date Filter
     if not df_master.empty and 'tanggal' in df_master.columns:
@@ -283,13 +291,13 @@ def render_sidebar(df_master, df_exploded):
         max_date = datetime.today().date()
 
     date_range = st.sidebar.date_input(
-        "Select Date Range",
+        "Pilih Rentang Tanggal",
         value=(min_date, max_date),
         min_value=min_date,
         max_value=max_date
     )
 
-    granularity = st.sidebar.radio("Granularity", ["Monthly", "Weekly"], horizontal=True)
+    granularity = st.sidebar.radio("Periode (Granularity)", ["Monthly", "Weekly"], horizontal=True)
 
     start_date, end_date = date_range if len(date_range) == 2 else (min_date, max_date)
 

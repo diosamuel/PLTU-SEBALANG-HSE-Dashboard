@@ -4,17 +4,18 @@ import plotly.express as px
 import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
-from utils import load_data, render_sidebar, set_header_title
+from utils import load_data, render_sidebar, set_header_title, HSE_COLOR_MAP
 
 # Page Config
-st.set_page_config(page_title="Personnel Performance", page_icon=None, layout="wide")
+# Page Config
+st.set_page_config(page_title="Kinerja Personil", page_icon=None, layout="wide")
 
 # Loaded via utils.render_sidebar()
 
 # Data
 df_exploded, df_master, _ = load_data()
 df_master_filtered, _ = render_sidebar(df_master, df_exploded)[:2]
-set_header_title("Personnel Performance")
+set_header_title("Analisis Kinerja Personil")
 
 
 
@@ -37,18 +38,18 @@ c1, c2 = st.columns(2)
 with c1:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Active Reporters</h3>
+        <h3>Pelapor Aktif</h3>
         <h2>{unique_reporters}</h2>
-        <p style="color:grey; font-size:0.8rem;">Unique contributors</p>
+        <p style="color:grey; font-size:0.8rem;">Kontributor unik</p>
     </div>
     """, unsafe_allow_html=True)
 
 with c2:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Max Workload</h3>
-        <h2>{max_workload} Tasks</h2>
-        <p style="color:grey; font-size:0.8rem;">Held by: {top_pic}</p>
+        <h3>Beban Kerja Maksimal</h3>
+        <h2>{max_workload} Temuan</h2>
+        <p style="color:grey; font-size:0.8rem;">Oleh: {top_pic}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -81,7 +82,7 @@ if dept_col:
     df_dept = df_dept.sort_values('Total', ascending=True)
 
 # --- Tabs for Analysis ---
-tab_dept, tab_personnel = st.tabs(["Department", "Personnel"])
+tab_dept, tab_personnel = st.tabs(["Departemen", "Personil"])
 
 # =============================================
 # TAB 1: DEPARTMENT (Grid Layout)
@@ -92,13 +93,13 @@ with tab_dept:
     
     with col_left:
         # --- Row 1: Department Performance ---
-        st.subheader("Department Performance")
-        st.caption("Total volume vs. completion status by department.")
+        st.subheader("Kinerja Departemen")
+        st.caption("Volume total vs status penyelesaian per departemen.")
     
         if not df_dept.empty:
             # View Options
             c_view, _ = st.columns([1, 2])
-            dept_view = c_view.radio("View Layout:", ["Scrollable", "Fit to Screen"], horizontal=True, label_visibility="collapsed", key="dept_view_radio")
+            dept_view = c_view.radio("Tampilan:", ["Scrollable", "Fit To Screen"], horizontal=True, label_visibility="collapsed", key="dept_view_radio")
             
             # Truncate long department names (max 30 chars)
             def truncate_dept(name, limit=30):
@@ -211,13 +212,13 @@ with tab_dept:
                 )
                 st.plotly_chart(fig_dept, use_container_width=True)
         else:
-            st.info("Department data (team_role) not found.")
+            st.info("Data departemen (team_role) tidak ditemukan.")
         
         st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
 
         # --- Row 2: Risk Category Matrix ---
-        st.subheader("Department Temuan Kategori Matrix")
-        st.caption("Findings breakdown by department and risk category.")
+        st.subheader("Matriks Kategori Temuan Departemen")
+        st.caption("Rincian temuan berdasarkan departemen dan kategori risiko.")
         
         if 'team_role' in df_master_filtered.columns and 'temuan_kategori' in df_master_filtered.columns:
             # 1. Create the base matrix
@@ -232,7 +233,7 @@ with tab_dept:
         
         # 2. View Options
         c_view, _ = st.columns([1, 2])
-        matrix_view = c_view.radio("View Layout:", ["Scrollable", "Fit to Screen"], horizontal=True, label_visibility="collapsed", key="matrix_view_radio")
+        matrix_view = c_view.radio("Tampilan:", ["Scrollable", "Fit To Screen"], horizontal=True, label_visibility="collapsed", key="matrix_view_radio")
         
         # 3. Define Scale
         custom_scale = [
@@ -277,10 +278,13 @@ with tab_dept:
                 fig_header = go.Figure()
                 # Create dummy scatter for each category position
                 for i, cat in enumerate(categories):
+                    # Use HSE Color if available, else default blue
+                    header_color = HSE_COLOR_MAP.get(cat, '#00526A')
+                    
                     fig_header.add_trace(go.Scatter(
-                        x=[i], y=[0], mode='text', text=[cat],
+                        x=[i], y=[0], mode='text', text=[f"<b>{cat}</b>"], # Use HTML for bold
                         textposition='bottom center',
-                        textfont=dict(color='#00526A', size=11),
+                        textfont=dict(color=header_color, size=11), # Removed invalid 'weight'
                         hoverinfo='none'
                     ))
                 fig_header.update_layout(
@@ -326,7 +330,7 @@ with tab_dept:
                         cmin=0, cmax=z_max,
                         color=[0, z_max],
                         colorbar=dict(
-                            title="Count",
+                            title="Jumlah",
                             titleside="right",
                             thickness=15,
                             len=0.8,
@@ -354,13 +358,13 @@ with tab_dept:
 
     with col_right:
         # --- Dept Radar Chart ---
-        st.subheader("Dept Reporting Culture")
-        st.caption("3-axis radar: Activeness, Effort, RCI.")
+        st.subheader("Budaya Pelaporan Departemen")
+        st.caption("Radar 3-sumbu: Keaktifan, Upaya, RCI.")
         
         if not df_dept.empty and dept_col:
             all_depts = df_dept[dept_col].tolist()
             top_3_rci = df_dept.sort_values('RCI', ascending=False).head(3)[dept_col].tolist()
-            selected_radar_depts = st.multiselect("Departments:", all_depts, default=top_3_rci, key="radar_depts")
+            selected_radar_depts = st.multiselect("Departemen:", all_depts, default=top_3_rci, key="radar_depts")
             
             if selected_radar_depts:
                 df_radar = df_dept[df_dept[dept_col].isin(selected_radar_depts)]
@@ -368,7 +372,7 @@ with tab_dept:
                 text_positions = ['top center', 'bottom center', 'middle left', 'middle right', 'top left', 'top right']
                 
                 for trace_idx, (index, row) in enumerate(df_radar.iterrows()):
-                    categories = ['RCI', 'Effort Factor<br>(Closing Count)', 'Activeness Point<br>(Findings Count)']
+                    categories = ['RCI', 'Faktor Upaya<br>(Jumlah Closing)', 'Poin Keaktifan<br>(Jumlah Temuan)']
                     values = [row['RCI'], row['Effort'], row['Activeness']]
                     categories = categories + [categories[0]]
                     values = values + [values[0]]
@@ -398,16 +402,16 @@ with tab_dept:
                 )
                 st.plotly_chart(fig_radar, use_container_width=True)
             else:
-                st.info("Select departments to view Radar.")
+                st.info("Pilih departemen untuk melihat Radar.")
         else:
-            st.info("No data for Radar Chart.")
+            st.info("Tidak ada data untuk diagram Radar.")
 
 # =============================================
 # TAB 2: PERSONNEL
 # =============================================
 with tab_personnel:
-    st.subheader("Personnel Productivity")
-    st.caption("Workload analysis: Total Reports vs. Total Closed.")
+    st.subheader("Produktivitas Personil")
+    st.caption("Analisis Beban Kerja: Total Laporan vs. Total Closed.")
     
     if 'creator_name' in df_master_filtered.columns:
         # Group by Reporter
@@ -441,7 +445,7 @@ with tab_personnel:
                                  size_max=40, # Make bubbles slightly larger
                                  color='Closed Count',
                                  color_continuous_scale='Teal',
-                                 title="<br><sup style='color:#00526A'>X: Total Reports | Y: Total Closed | Color: Closed Count</sup>")
+                                 title="<br><sup style='color:#00526A'>X: Total Laporan | Y: Total Closed | Warna: Jumlah Closed</sup>")
         
         # fig_scatter.update_traces(textposition='top center') # Removed
         fig_scatter.update_traces(marker=dict(opacity=0.7, line=dict(width=1, color='DarkSlateGrey')))
@@ -477,7 +481,7 @@ with tab_personnel:
                                   margin=dict(l=0, r=0, t=30, b=10), height=500)
         st.plotly_chart(fig_scatter, use_container_width=True)
     else:
-        st.info("No reporter data available.")
+        st.info("Tidak ada data pelapor yang tersedia.")
 
     # --- E. Personnel Detail (inside tab_personnel) ---
     with st.container():
@@ -489,15 +493,18 @@ with tab_personnel:
     
     col_f1, col_f2, col_f3 = st.columns(3) # 3 Column Layout
     
-    sel_role = col_f1.selectbox("Filter by Role:", roles_list)
-    sel_team = col_f2.selectbox("Filter by Department:", teams_list)
+    sel_team = col_f1.selectbox("Filter by Department:", teams_list)
+
+    sel_role = col_f2.selectbox("Filter by Role:", roles_list)
+
     
     # Filter Logic for selection list
     df_reporters = df_master_filtered.copy()
-    if sel_role != "All":
-        df_reporters = df_reporters[df_reporters['role'] == sel_role]
+
     if sel_team != "All":
         df_reporters = df_reporters[df_reporters['team_role'] == sel_team]
+    if sel_role != "All":
+        df_reporters = df_reporters[df_reporters['role'] == sel_role]
         
     reporters = sorted(df_reporters['creator_name'].dropna().unique()) if 'creator_name' in df_reporters.columns else []
     
@@ -558,13 +565,8 @@ with tab_personnel:
                 risk_counts = df_reported_by['temuan_kategori'].value_counts().reset_index()
                 risk_counts.columns = ['Category', 'Count']
                 
-                color_map = {
-                    'Near Miss': '#FF4B4B', 
-                    'Unsafe Condition': '#FFAA00', 
-                    'Unsafe Action': '#E67E22', 
-                    'Positive': '#00526A',
-                    'Safe': '#00526A'
-                }
+                # Use Global Palette
+                color_map = HSE_COLOR_MAP
                 
                 fig_pie = px.pie(risk_counts, values='Count', names='Category',
                                  color='Category', color_discrete_map=color_map, hole=0.5,
@@ -592,17 +594,13 @@ with tab_personnel:
         st.markdown("**Report Locations**")
         
         # Check for lat/lon data
-        # Debug: show available columns
         has_lat = 'lat' in df_reported_by.columns
         has_lon = 'lon' in df_reported_by.columns
-        st.caption(f"Debug: lat={has_lat}, lon={has_lon}, rows={len(df_reported_by)}")
         
         if has_lat and has_lon:
             df_geo = df_reported_by.dropna(subset=['lat', 'lon'])
-            st.caption(f"After dropna: {len(df_geo)} rows with coordinates")
             
             if not df_geo.empty:
-                st.caption(f"{len(df_geo)} locations found")
                 
                 import folium
                 from folium.plugins import MarkerCluster
@@ -611,21 +609,20 @@ with tab_personnel:
                 center_lat = -5.585357333271365
                 center_lon = 105.38785245329919
                 
-                m = folium.Map(location=[center_lat, center_lon], zoom_start=17)
+                m = folium.Map(location=[center_lat, center_lon], zoom_start=15)
                 
                 # Stadia Satellite Layer
                 folium.TileLayer(
                     tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg',
                     attr='&copy; Stadia Maps', name='Stadia Satellite'
                 ).add_to(m)
-                marker_cluster = MarkerCluster(name='Reports').add_to(m)
                 
                 def get_color(category):
                     cat_lower = str(category).lower()
-                    if 'near miss' in cat_lower: return 'red'
-                    if 'unsafe condition' in cat_lower: return 'beige'
-                    if 'unsafe action' in cat_lower: return 'orange'
-                    if 'positive' in cat_lower: return 'blue'
+                    if 'near miss' in cat_lower: return 'darkblue'      # #1A237E
+                    if 'unsafe condition' in cat_lower: return 'orange' # #F57F17
+                    if 'unsafe action' in cat_lower: return 'red'       # #B71C1C -> red/darkred
+                    if 'positive' in cat_lower: return 'darkgreen'      # #1B5E20
                     return 'cadetblue'
                 
                 for _, row in df_geo.iterrows():
@@ -641,14 +638,15 @@ with tab_personnel:
                     </div>
                     """
                     
+                    # Add marker directly to map (no clustering)
                     folium.Marker(
                         location=[row['lat'], row['lon']],
                         popup=folium.Popup(popup_html, max_width=200),
                         icon=folium.Icon(color=get_color(kategori), icon='info-sign')
-                    ).add_to(marker_cluster)
+                    ).add_to(m)
                 
-                st_folium(m, width="100%", height=300, returned_objects=[])
+                st_folium(m, width="100%", height=400, returned_objects=[])
             else:
-                st.info("No location data available for this reporter's findings.")
+                st.info("Tidak ada data lokasi untuk temuan pelapor ini.")
         else:
-            st.info("Location columns (lat/lon) not found in data.")
+            st.info("Kolom lokasi (lat/lon) tidak ditemukan dalam data.")
