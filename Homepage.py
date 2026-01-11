@@ -27,6 +27,7 @@ if df_master.empty:
     st.error("Data tidak dapat dimuat. Silakan periksa path data.")
     st.stop()
 
+
 # --- 4. Sidebar Filters ---
 from utils import render_sidebar, set_header_title
 df_master_filtered, df_exploded_filtered, granularity = render_sidebar(df_master, df_exploded)

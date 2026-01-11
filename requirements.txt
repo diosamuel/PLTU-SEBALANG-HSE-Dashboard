@@ -5,3 +5,5 @@ wordcloud
 folium
 streamlit-folium
 matplotlib
+psycopg2-binary
+sqlalchemy<2.0

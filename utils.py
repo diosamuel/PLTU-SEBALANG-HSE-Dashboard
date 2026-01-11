@@ -1,19 +1,150 @@
 import pandas as pd
 import streamlit as st
 import os
+from sqlalchemy import create_engine, text
 from datetime import datetime
-
-# Constants
-DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/IZAT RAPIH - Experiment Ketiga.csv')
-MAP_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data/map_izat.csv')
 
 # --- GLOBAL COLOR PALETTE (High Contrast) ---
 HSE_COLOR_MAP = {
-    "Positive": "#1B5E20",         # Deep Emerald Green (Safe/Success)
-    "Unsafe Action": "#B71C1C",    # Crimson Red (High Urgency/Danger)
-    "Unsafe Condition": "#F57F17", # Amber/Golden-Yellow (Caution - visible on light blue)
-    "Near Miss": "#1A237E"         # Deep Indigo (Critical/Close Call)
+    "Positive": "#1B5E20",         # Deep Emerald Green
+    "Unsafe Action": "#B71C1C",    # Crimson Red
+    "Unsafe Condition": "#F57F17", # Amber/Golden-Yellow
+    "Near Miss": "#1A237E"         # Deep Indigo
 }
+
+# --- DATABASE CONNECTION ---
+def get_db_engine():
+    """
+    Establishes a connection to the PostgreSQL Data Warehouse
+    using credentials stored in .streamlit/secrets.toml
+    """
+    try:
+        # Check if secrets exist, otherwise try environment variables or fail gracefully
+        if "postgres" in st.secrets:
+            db_config = st.secrets["postgres"]
+            db_url = f"postgresql+psycopg2://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['dbname']}"
+        else:
+            # Fallback for manual testing if secrets aren't set up yet
+            # Using credentials provided in migration plan
+            db_url = "postgresql+psycopg2://postgres.hmdbqxhdvebwheyucmvo:bkQXObqSKo4dUtwr@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
+            
+        engine = create_engine(db_url)
+        return engine
+    except Exception as e:
+        st.error(f"Failed to configure database engine: {e}")
+        return None
+
+@st.cache_data(ttl=3600)
+def load_data():
+    """
+    Loads data from the PostgreSQL Data Warehouse and preprocesses it 
+    to match the legacy CSV format expected by the Streamlit app.
+    """
+    try:
+        engine = get_db_engine()
+        if not engine:
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        
+        # --- SQL QUERY: Star Schema Reconstruction ---
+        # 1. Reconstructs timestamps using MAKE_TIMESTAMP
+        # 2. Calculates SLA dynamically (Create Date + 7 Days)
+        # 3. Renames 'long' -> 'lon' for Map compatibility
+        query = """
+        SELECT 
+            f.kode_temuan,
+            
+            -- 1. Reconstruct Create Date (Handle potential NULLs safely)
+            CASE WHEN dd_create."year" IS NOT NULL 
+                 THEN MAKE_TIMESTAMP(dd_create."year", dd_create."month", dd_create."day", dd_create.hours, dd_create.minutes, 0.0)
+                 ELSE NULL 
+            END AS tanggal,
+
+            -- 2. Calculate SLA (+7 Days logic)
+            CASE WHEN dd_create."year" IS NOT NULL 
+                 THEN (MAKE_TIMESTAMP(dd_create."year", dd_create."month", dd_create."day", dd_create.hours, dd_create.minutes, 0.0) + INTERVAL '7 days')
+                 ELSE NULL 
+            END AS deadline_sla,
+            
+            -- 3. Reconstruct Close Date (NULL if ticket is Open)
+            CASE WHEN dd_close."year" IS NOT NULL 
+                 THEN MAKE_TIMESTAMP(dd_close."year", dd_close."month", dd_close."day", dd_close.hours, dd_close.minutes, 0.0)
+                 ELSE NULL 
+            END AS close_at,
+
+            -- 4. Personnel Info
+            dc.creator_name,
+            dc.creator_nid,
+            dc.role,
+            dc.departemen AS team_role,
+            dp.pic_name AS nama_pic,
+            dp.pic_nama_departemen AS nama_departement_pic,
+
+            -- 5. Finding Details
+            dt.temuan_kategori,
+            dt.temuan_status,
+            dt.temuan_kondisi, 
+            dt.temuan_kondisi AS "temuan.kondisi.lemma", -- Alias for Wordcloud
+            dt.temuan_nama,     
+            dt.temuan_nama AS "temuan.nama", -- Alias for backward compatibility
+            dt.temuan_rekomendasi,
+            
+            -- 6. Geospatial (Rename 'long' to 'lon')
+            loc.nama_lokasi,
+            loc.lat,
+            loc.long AS lon,
+            loc.zona
+
+        FROM public.fact_k3 f
+        LEFT JOIN public.dim_temuan dt ON CAST(f.kode_temuan AS VARCHAR) = CAST(dt.kode_temuan AS VARCHAR)
+        LEFT JOIN public.dim_creator dc ON CAST(f.creator_nid AS VARCHAR) = CAST(dc.creator_nid AS VARCHAR)
+        LEFT JOIN public.dim_pic_id dp ON CAST(f.pic_id AS VARCHAR) = CAST(dp.pic_sk AS VARCHAR)
+        LEFT JOIN public.dim_tempat_id loc ON CAST(f.tempat_id AS VARCHAR) = CAST(loc.nama_lokasi AS VARCHAR)
+        LEFT JOIN public.dim_create_date_id dd_create ON CAST(f.create_id AS VARCHAR) = CAST(dd_create.create_date_sk AS VARCHAR)
+        LEFT JOIN public.dim_close_date_id dd_close ON CAST(f.close_id AS VARCHAR) = CAST(dd_close.close_date_sk AS VARCHAR)
+        """
+        
+        with engine.connect() as conn:
+            df_master = pd.read_sql(text(query), conn)
+
+        # --- PYTHON POST-PROCESSING ---
+        
+        # 1. Enforce Datetime Types
+        df_master['tanggal'] = pd.to_datetime(df_master['tanggal'], errors='coerce')
+        df_master['deadline_sla'] = pd.to_datetime(df_master['deadline_sla'], errors='coerce')
+        
+        # 2. String Cleaning (Strip whitespace)
+        cols_to_strip = ['temuan_status', 'temuan_kategori', 'temuan.nama']
+        for col in cols_to_strip:
+            if col in df_master.columns:
+                df_master[col] = df_master[col].astype(str).str.strip()
+        
+        # 3. Global Filter (Exclude P2K3)
+        if 'temuan.nama' in df_master.columns:
+            df_master = df_master[~df_master['temuan.nama'].str.lower().str.contains('p2k3', na=False)]
+
+        # 4. Explode Logic (Crucial for Pareto Charts)
+        # The DB has 1 row per finding. If temuan_nama = "Helmet, Shoes", we split it into 2 rows.
+        df_exploded = df_master.copy()
+        
+        if df_exploded['temuan.nama'].str.contains(',').any():
+            df_exploded['temuan.nama'] = df_exploded['temuan.nama'].str.split(',')
+            df_exploded = df_exploded.explode('temuan.nama')
+            df_exploded['temuan.nama'] = df_exploded['temuan.nama'].str.strip()
+            
+        # 5. Recreate 'Parent' Category (Heuristic: First word of object name)
+        df_exploded['temuan.nama.parent'] = df_exploded['temuan.nama'].apply(
+            lambda x: str(x).split()[0] if x else None
+        )
+
+        # 6. Extract Map Data
+        df_map = df_master[['nama_lokasi', 'lat', 'lon']].drop_duplicates().dropna()
+
+        return df_exploded, df_master, df_map
+
+    except Exception as e:
+        st.error(f"⚠️ Database Connection Error: {e}")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
 
 def load_css():
     st.markdown("""
@@ -177,61 +308,6 @@ def set_header_title(title):
     </style>
     """, unsafe_allow_html=True)
 
-@st.cache_data
-def load_data():
-    """
-    Loads and preprocesses the main dataset and spatial data.
-    """
-    try:
-        df = pd.read_csv(DATA_PATH)
-        df_map = pd.read_csv(MAP_DATA_PATH)
-    except FileNotFoundError as e:
-        st.error(f"File not found: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
-    if 'tanggal' in df.columns:
-        df['tanggal'] = pd.to_datetime(df['tanggal'], dayfirst=True, errors='coerce')
-    
-    if 'tanggal' in df.columns:
-        df['deadline_sla'] = df['tanggal'] + pd.Timedelta(days=7)
-
-    cols_to_strip = ['kode_temuan', 'nama_lokasi', 'temuan_status', 'temuan_kategori', 'temuan.nama']
-    for col in cols_to_strip:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-
-    # Filter out findings with "p2k3" in temuan.nama (Global Rule)
-    if 'temuan.nama' in df.columns:
-        df = df[~df['temuan.nama'].str.lower().str.contains('p2k3', na=False)]
-
-    # Process Map Data
-    if 'latlong' in df_map.columns:
-        # Split and coerce to numeric, turning errors (like 'belt conveyor') into NaN
-        coords = df_map['latlong'].str.split(',', expand=True)
-        if coords.shape[1] >= 2:
-            df_map['lat'] = pd.to_numeric(coords[0], errors='coerce')
-            df_map['lon'] = pd.to_numeric(coords[1], errors='coerce')
-        else:
-            df_map['lat'] = None
-            df_map['lon'] = None
-            
-    # Standardize join keys for merging
-    if 'Tempat' in df_map.columns:
-        df_map['Tempat'] = df_map['Tempat'].astype(str).str.strip()
-    
-    df_exploded = df.copy()
-
-    if 'kode_temuan' in df.columns:
-        df_master = df.drop_duplicates(subset='kode_temuan').copy()
-    else:
-        df_master = df.copy()
-        
-    # Perform Left Join if keys exist
-    if 'nama_lokasi' in df_master.columns and 'Tempat' in df_map.columns:
-        df_master = df_master.merge(df_map, left_on='nama_lokasi', right_on='Tempat', how='left')
-
-    return df_exploded, df_master, df_map
-
 def filter_by_date(df, start_date, end_date):
     if 'tanggal' not in df.columns:
         return df
@@ -272,6 +348,9 @@ def render_sidebar(df_master, df_exploded):
     
     # Reverted to Wikimedia Logo as requested
     st.sidebar.image("https://kehatitenayan.web.id/static/media/PLN-NP.a8c9cf3c76844681aca8.png", width=200)
+    
+    # DB Status Indicator
+    st.sidebar.success("✅ Terhubung: Supabase")
         
     st.sidebar.title("Filter HSE")
 
