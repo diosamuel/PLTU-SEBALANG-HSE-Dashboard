@@ -3,16 +3,17 @@ import pandas as pd
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster, HeatMap
-from utils import load_data, render_sidebar
+from utils import load_data, render_sidebar, set_header_title
 
 # Page Config
-st.set_page_config(page_title="Spatial Analysis - HSE", layout="wide")
+st.set_page_config(page_title="Risk Map & Spatial Analysis", layout="wide")
 
 # Data Loading
 df_exploded, df_master, df_map = load_data()
 df_master_filtered, _, _ = render_sidebar(df_master, df_exploded)
+set_header_title("Spatial Risk Analysis")
 
-st.title("Spatial Risk Analysis")
+
 
 col_map, col_details = st.columns([3, 1])
 
@@ -95,13 +96,13 @@ with col_map:
                     style='position: absolute; z-index:9999; background-color: rgba(255, 255, 255, 0.85);
                         border-radius: 8px; padding: 10px; font-size: 12px; bottom: 30px; left: 30px; 
                         border: 1px solid grey; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); font-family: sans-serif;'>
-                    <div class='legend-title' style='font-weight: bold; margin-bottom: 5px; font-size: 14px;'>Risk Level (Pins & Heat)</div>
+                    <div class='legend-title' style='font-weight: bold; margin-bottom: 5px; font-size: 14px;'>Temuan Kategori (Pins & Heat)</div>
                     <div class='legend-scale'>
                     <ul class='legend-labels' style='list-style: none; padding: 0; margin: 0;'>
-                        <li style='margin-bottom: 5px;'><span style='background:#FF4B4B; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Near Miss (Critical)</li>
-                        <li style='margin-bottom: 5px;'><span style='background:#E67E22; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Unsafe Action (High)</li>
-                        <li style='margin-bottom: 5px;'><span style='background:#FFAA00; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Unsafe Condition (Medium)</li>
-                        <li style='margin-bottom: 5px;'><span style='background:#00526A; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Positive (Low)</li>
+                        <li style='margin-bottom: 5px;'><span style='background:#FF4B4B; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Near Miss</li>
+                        <li style='margin-bottom: 5px;'><span style='background:#E67E22; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Unsafe Action</li>
+                        <li style='margin-bottom: 5px;'><span style='background:#FFAA00; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Unsafe Condition</li>
+                        <li style='margin-bottom: 5px;'><span style='background:#00526A; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Positive</li>
                     </ul>
                     </div>
                 </div>
@@ -114,7 +115,7 @@ with col_map:
                 folium.LayerControl().add_to(m)
                 st.session_state[map_key] = m
 
-            st_folium(st.session_state[map_key], width="100%", height=700, returned_objects=[])
+            st_folium(st.session_state[map_key], width="100%", height=500, returned_objects=[])
         else:
             st.warning("No coordinate matches found for filtered data.")
     else:

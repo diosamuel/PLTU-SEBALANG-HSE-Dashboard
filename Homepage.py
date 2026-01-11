@@ -10,7 +10,7 @@ from folium.plugins import HeatMap
 
 # --- 1. Page Configuration ---
 st.set_page_config(
-    page_title="PLTU Sebalang HSE Dashboard",
+    page_title="HSSE Executive Summary",
     page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded"
@@ -28,11 +28,12 @@ if df_master.empty:
     st.stop()
 
 # --- 4. Sidebar Filters ---
-from utils import render_sidebar
+from utils import render_sidebar, set_header_title
 df_master_filtered, df_exploded_filtered, granularity = render_sidebar(df_master, df_exploded)
 
 # --- 5. Header & Global Alerts ---
-st.title("HSE Executive Summary")
+set_header_title("HSSE Executive Summary")
+
 
 # Global Alert for Open Near Miss
 near_miss_open = df_master_filtered[
@@ -62,7 +63,12 @@ if total_findings > 0:
 else:
     closing_rate = 0.0
 
-c1, c2, c3 = st.columns(3)
+pending_near_miss = df_master_filtered[
+    (df_master_filtered['temuan_kategori'] == 'Near Miss') & 
+    (df_master_filtered['temuan_status'] == 'Open')
+].shape[0]
+
+c1, c2, c3, c4 = st.columns(4)
 
 with c1:
     st.markdown(f"""
@@ -91,7 +97,16 @@ with c3:
     </div>
     """, unsafe_allow_html=True)
 
-st.markdown("---")
+with c4:
+    st.markdown(f"""
+    <div class="metric-card">
+        <h3>Pending Near Miss</h3>
+        <h2 style="color: #FF4B4B;">{pending_near_miss}</h2>
+        <p style="color:grey; font-size:0.8rem;">Open 'Near Miss' findings</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
 
 # --- 7. Charts (Row 1) ---
 col_left, col_right = st.columns([2, 1])
@@ -105,10 +120,10 @@ with col_left:
         trend_mode = st.radio("View Mode:", ["Total Trend", "Breakdown by Category"], horizontal=True, label_visibility="collapsed")
         
         # Determine frequency and label based on granularity
-        if granularity == 'Daily':
-            resample_freq = 'D'
-            period_freq = 'D'
-            time_label = 'Day'
+        if granularity == 'Weekly':
+            resample_freq = 'W'
+            period_freq = 'W'
+            time_label = 'Week'
         else:
             resample_freq = 'M'
             period_freq = 'M'
@@ -118,8 +133,14 @@ with col_left:
             if trend_mode == "Total Trend":
                 df_trend = df_master_filtered.set_index('tanggal').resample(resample_freq)['kode_temuan'].nunique().reset_index()
                 fig_trend = px.line(df_trend, x='tanggal', y='kode_temuan', markers=True, 
-                                    color_discrete_sequence=['#00526A'],
+                                    color_discrete_sequence=['black'],
                                     title=f"<b>Finding Trend (Total)</b><br><sup style='color:#00526A'>Count of unique 'kode_temuan' per {time_label}</sup>")
+                
+                # Force show all x-axis labels
+                if granularity == 'Weekly':
+                     fig_trend.update_xaxes(dtick="604800000.0", tickformat="%d %b") # Weekly in ms
+                else: 
+                     fig_trend.update_xaxes(dtick="M1", tickformat="%b %Y")
             else:
                 # Breakdown by Category
                 if 'temuan_kategori' in df_master_filtered.columns:
@@ -142,6 +163,12 @@ with col_left:
                     fig_trend = px.line(df_trend, x='tanggal', y='Count', color='temuan_kategori', markers=True,
                                         color_discrete_map=trend_colors,
                                         title=f"<b>Finding Trend (Breakdown)</b><br><sup style='color:#00526A'>Count per Category per {time_label}</sup>")
+                    
+                    # Force show all x-axis labels
+                    if granularity == 'Weekly':
+                         fig_trend.update_xaxes(dtick="604800000.0", tickformat="%d %b")
+                    else:
+                         fig_trend.update_xaxes(dtick="M1", tickformat="%b %Y")
                 else:
                     st.warning("Category column missing.")
                     df_trend = pd.DataFrame() # Fallback
@@ -151,7 +178,9 @@ with col_left:
                                         font=dict(color="#00526A"), 
                                         title=dict(font=dict(color="#00526A")),
                                         xaxis=dict(title=None),
-                                        yaxis=dict(title="Count"))
+                                        yaxis=dict(title="Count"),
+                                        height=280, # Compact Height
+                                        margin=dict(l=0, r=0, t=30, b=0))
                 st.plotly_chart(fig_trend, use_container_width=True)
 
 with col_right:
@@ -173,26 +202,36 @@ with col_right:
             fig_pie = px.pie(df_risk, values='Count', names='Category', 
                             color='Category', color_discrete_map=color_map, hole=0.4,
                             title="<b>Risk Distribution</b><br><sup style='color:#00526A'>Proportion of 'temuan_kategori'</sup>")
+            fig_pie.update_traces(textinfo='percent+value', texttemplate='%{value}<br>(%{percent})')
             fig_pie.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                   font=dict(color="#00526A"), 
-                                  title=dict(font=dict(color="#00526A")))
+                                  title=dict(font=dict(color="#00526A")),
+                                  height=300, # Compact Height
+                                  margin=dict(l=0, r=0, t=30, b=20))
             st.plotly_chart(fig_pie, use_container_width=True)
 
 # --- 8. Charts (Row 2: Top Issues) ---
-with st.container():
-    st.subheader("Top Recuring Issues (Object)")
-    st.caption("Identifies the most frequently reported objects to target preventive maintenance.")
-    if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exploded_filtered.columns:
+# --- 8. Charts (Row 2: Top Issues) ---
+if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exploded_filtered.columns:
+    
+    col_bar, col_line = st.columns([1, 1])
+    
+    with col_bar:
+        st.subheader("Top Recuring Issues (Object)")
+        st.caption("Identifies the most frequently reported objects.")
         
-        col_bar, col_line = st.columns([1, 1])
-        
-        with col_bar:
-            # Group by Object AND Category to show category context
+    with col_line:
+        st.subheader("Trend of Recurring Issues")
+        st.caption("Volume trend of selected objects over time.")
+
+    with col_bar:
+        # Group by Object AND Category to show category context
             top_objects = df_exploded_filtered.groupby(['temuan.nama', 'temuan_kategori']).size().reset_index(name='Count')
             top_objects.columns = ['Object', 'Category', 'Count']
             
-            # Sort by Count to ensure meaningful order
-            top_objects = top_objects.sort_values('Count', ascending=False)
+            # Calculate TOTAL counts per Object for Sorting and Top 10 logic
+            object_totals = top_objects.groupby('Object')['Count'].sum().reset_index().sort_values('Count', ascending=False)
+            sorted_objects = object_totals['Object'].tolist()
             
             # Define colors (Same as Risk Distribution)
             color_map = {
@@ -202,109 +241,196 @@ with st.container():
                 'Positive': '#00526A', # PLN Dark Blue
             }
             
-            # Custom Legend (Static above scroll area)
-            legend_html = "<div style='display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;'>"
+            # Filter limit
+            limit_mode = st.radio("Show:", ["Top 10", "All"], horizontal=True, key="bar_limit", label_visibility="collapsed")
+            if limit_mode == "Top 10":
+                top_10_names = sorted_objects[:10]
+                top_objects_plot = top_objects[top_objects['Object'].isin(top_10_names)]
+            else:
+                top_objects_plot = top_objects.copy()
+
+            # Custom Legend (Moved below switch)
+            legend_html = "<div style='display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; margin-top: 5px;'>"
             for cat, color in color_map.items():
                 legend_html += f"<div style='display: flex; align-items: center;'><span style='width: 12px; height: 12px; background-color: {color}; display: inline-block; margin-right: 5px; border-radius: 2px;'></span><span style='font-size: 12px; color: #00526A;'>{cat}</span></div>"
             legend_html += "</div>"
             st.markdown(legend_html, unsafe_allow_html=True)
 
+            # Determine Shared X-Axis Range
+            max_val = top_objects_plot.groupby(['Object'])['Count'].sum().max()
+            if pd.isna(max_val): max_val = 10 
+            # Add some padding
+            range_x = [0, max_val * 1.1]
+
+            # Recalculate sort order specifically for the plotted data to ensure consistency
+            # Group by Object, Sum Count, Sort Descending (Highest at Top visually if reversed)
+            plot_totals = top_objects_plot.groupby('Object')['Count'].sum().sort_values(ascending=False)
+            sorted_plot_objects = plot_totals.index.tolist()
+
             # Dynamic Height
-            dynamic_height = max(400, len(top_objects) * 30)
+            dynamic_height = max(400, len(top_objects_plot) * 30)
             
-            fig_bar = px.bar(top_objects, x='Count', y='Object', orientation='h',
+            # --- 1. Fixed Header (X-Axis) ---
+            fig_header = go.Figure()
+            fig_header.add_trace(go.Scatter(x=[0], y=[0], mode='markers', marker=dict(opacity=0))) # Dummy trace
+            
+            fig_header.update_layout(
+                xaxis=dict(
+                    range=range_x, 
+                    side="top", 
+                    title="Count", # Added Title
+                    color="#00526A",
+                    showgrid=False
+                ),
+                yaxis=dict(visible=False),
+
+                height=30, # Compact height (Reduced further)
+                margin=dict(l=100, r=0, t=30, b=0), # Reduced top margin
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                showlegend=False
+            )
+            st.plotly_chart(fig_header, use_container_width=True, config={'displayModeBar': False})
+
+
+            # --- 2. Scrollable Body (Bars) ---
+            # Truncate Labels for display
+            # Truncate Labels for display
+            # Guard: Max 14 chars only
+            def truncate_label(text, limit=12):
+                text = str(text)
+                if len(text) > limit:
+                    return text[:limit] + "..."
+                return text
+            
+            # Use .loc to avoid SettingWithCopyWarning if it's a slice
+            top_objects_plot = top_objects_plot.copy()
+            top_objects_plot['DisplayObject'] = top_objects_plot['Object'].apply(lambda x: truncate_label(str(x)))
+
+            fig_bar = px.bar(top_objects_plot, x='Count', y='DisplayObject', orientation='h',
                             color='Category', 
-                            color_discrete_map=color_map, # Use consistent colors
+                            text='Count', 
+                            color_discrete_map=color_map, 
                             height=dynamic_height,
-                            title="<b>Recurring Issues</b><br><sup style='color:#00526A'>Frequency of 'temuan.nama' by Category</sup>")
-            fig_bar.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", 
-                                  yaxis=dict(autorange="reversed", color="#00526A"),
-                                  xaxis=dict(color="#00526A"),
-                                  font=dict(color="#00526A"),
-                                  title=dict(font=dict(color="#00526A")),
-                                  showlegend=False) # Hide internal legend since we added external one
+                            # Sort matches descending using original object names via custom order mapping if needed
+                            # But since we changed Y to DisplayObject, we need to sort DisplayObject
+                            # To keep correct order, we set category_orders on DisplayObject based on the sorted original Objects
+                            # We map sorted_plot_objects (full names) to truncated names
+                            category_orders={'DisplayObject': [truncate_label(x) for x in sorted_plot_objects]},
+                            hover_data={'Object': True, 'DisplayObject': False}, # Show Full Name on Hover
+                            title=None) # Remove Title
             
-            # Convert to HTML for robust scrolling in older Streamlit versions
-            import streamlit.components.v1 as components
-            chart_html = fig_bar.to_html(include_plotlyjs='cdn', full_html=False)
-            
-            # Embed with scrolling enabled
-            components.html(chart_html, height=400, scrolling=True)
-            
-        with col_line:
-            # Top Object Trend Line Chart
-            st.markdown("##### Trend of Recurring Issues") # Generic title
-            
-            # Get Top 5 Object Names for default selection
-            top_5_names = top_objects.groupby('Object')['Count'].sum().nlargest(5).index.tolist()
-            all_object_names = top_objects['Object'].unique().tolist()
-            
-            # Multiselect Filter
-            selected_trend_objects = st.multiselect(
-                "Select Objects to Filter:",
-                options=all_object_names,
-                default=top_5_names,
-                label_visibility="collapsed"
+            fig_bar.update_traces(
+                textposition='outside',
+                texttemplate='%{value}' # Custom Label Format
             )
             
-            # Filter Data based on Selection
-            if 'tanggal' in df_exploded_filtered.columns:
-                if selected_trend_objects:
-                    df_trend_filtered = df_exploded_filtered[df_exploded_filtered['temuan.nama'].isin(selected_trend_objects)].copy()
-                else:
-                    df_trend_filtered = pd.DataFrame() # Empty if nothing selected
-                
-                if not df_trend_filtered.empty:
-                    # Determine frequency based on granularity
-                    # Re-evaluating here in case scope is separate
-                    freq_alias = 'D' if granularity == 'Daily' else 'M'
-                    
-                    # Resample by Period (Month or Day) and Object
-                    df_trend_filtered['Period'] = pd.to_datetime(df_trend_filtered['tanggal']).dt.to_period(freq_alias).dt.to_timestamp()
-                    df_line_data = df_trend_filtered.groupby(['Period', 'temuan.nama']).size().reset_index(name='Count')
-                    
-                    fig_line_top = px.line(df_line_data, x='Period', y='Count', color='temuan.nama', markers=True,
-                                            color_discrete_sequence=px.colors.qualitative.Prism,
-                                            title=None)
-                    
-                    fig_line_top.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                                font=dict(color="#00526A"),
-                                                xaxis=dict(title=None, color="#00526A"),
-                                                yaxis=dict(title="Count", color="#00526A"),
-                                                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                    st.plotly_chart(fig_line_top, use_container_width=True)
-                else:
-                    st.info("No objects selected or no data available.")
-            else:
-                 st.info("Date data missing for trend analysis.")
-
+            fig_bar.update_layout(
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", 
+                yaxis=dict(
+                    autorange="reversed", 
+                    color="#00526A",
+                    title=None, # Remove Y-Axis Title ("DisplayObject")
+                    categoryorder='array', 
+                    categoryarray=[truncate_label(x) for x in sorted_plot_objects]
+                    # automargin=True # Cannot use automargin with split charts, must use fixed
+                ),
+                xaxis=dict(
+                    range=range_x,
+                    visible=True, 
+                    showticklabels=False, # Hide labels, kept grid if desired, or hide all
+                    showgrid=True,
+                    gridcolor='rgba(0,0,0,0.1)'
+                ),
+                font=dict(color="#00526A"),
+                margin=dict(l=100, r=0, t=0, b=0), # Adjusted margin matching header
+                title=None,
+                showlegend=False
+            )
+            
+            # Convert to HTML for robust scrolling
+            import streamlit.components.v1 as components
+            chart_html = fig_bar.to_html(include_plotlyjs='cdn', full_html=False, config={'displayModeBar': False})
+            
+            # Embed with scrolling enabled
+            # Decrease height of window slightly if needed, or keep 400
+            # Embed with scrolling enabled
+            components.html(chart_html, height=280, scrolling=True)
+            
+    with col_line:
+        # Top Object Trend Line Chart
         
-    else:
-        st.info("Column 'temuan.nama' not found for object analysis.")
+        # Get Top 5 Object Names for default selection
+        top_5_names = top_objects.groupby('Object')['Count'].sum().nlargest(5).index.tolist()
+        all_object_names = top_objects['Object'].unique().tolist()
+        
+        # Multiselect Filter
+        selected_trend_objects = st.multiselect(
+            "Select Objects to Filter:",
+            options=all_object_names,
+            default=top_5_names,
+            label_visibility="collapsed"
+        )
+        
+        # View Mode Switch
+        trend_view_mode = st.radio("View Mode:", ["Total Trend", "Category Breakdown"], horizontal=True, key="trend_view_recurring", label_visibility="collapsed")
+        
+        # Filter Data based on Selection
+        if 'tanggal' in df_exploded_filtered.columns:
+            if selected_trend_objects:
+                df_trend_filtered = df_exploded_filtered[df_exploded_filtered['temuan.nama'].isin(selected_trend_objects)].copy()
+            else:
+                df_trend_filtered = pd.DataFrame() # Empty if nothing selected
+            
+            if not df_trend_filtered.empty:
+                # Determine frequency based on granularity
+                # Re-evaluating here in case scope is separate
+                freq_alias = 'W' if granularity == 'Weekly' else 'M'
+                
+                # Resample by Period (Month or Day) and Object
+                df_trend_filtered['Period'] = pd.to_datetime(df_trend_filtered['tanggal']).dt.to_period(freq_alias).dt.to_timestamp()
+                
+                if trend_view_mode == "Category Breakdown":
+                    # Merge category info for legend
+                    df_obj_cat = df_exploded_filtered[['temuan.nama', 'temuan_kategori']].drop_duplicates(subset=['temuan.nama'])
+                    df_trend_filtered = df_trend_filtered.merge(df_obj_cat, on='temuan.nama', suffixes=('', '_y'))
+                    
+                    df_line_data = df_trend_filtered.groupby(['Period', 'temuan.nama', 'temuan_kategori']).size().reset_index(name='Count')
+                    df_line_data['LegendLabel'] = df_line_data['temuan.nama'] + " (" + df_line_data['temuan_kategori'] + ")"
+                    color_col = 'LegendLabel'
+                else:
+                    # Total Trend View
+                    df_line_data = df_trend_filtered.groupby(['Period', 'temuan.nama']).size().reset_index(name='Count')
+                    color_col = 'temuan.nama'
+                
+                fig_line_top = px.line(df_line_data, x='Period', y='Count', color=color_col, markers=True,
+                                        color_discrete_sequence=px.colors.qualitative.Prism,
+                                        title=None)
+                
+                fig_line_top.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                            font=dict(color="#00526A"),
+                                            xaxis=dict(title=None, color="#00526A"),
+                                            yaxis=dict(title="Count", color="#00526A"),
+                                            height=280, # Compact Height
+                                            margin=dict(l=0, r=0, t=0, b=0),
+                                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                st.plotly_chart(fig_line_top, use_container_width=True)
+            else:
+                st.info("No objects selected or no data available.")
+        else:
+                st.info("Date data missing for trend analysis.")
 
-# --- 8. Near Miss Alert ---
-st.subheader("Near Miss Alert")
+    
+else:
+    st.info("Column 'temuan.nama' not found for object analysis.")
 
-# KPI Calculation
-pending_high_risk = df_master_filtered[
-    (df_master_filtered['temuan_kategori'] == 'Near Miss') & 
-    (df_master_filtered['temuan_status'] == 'Open')
-].shape[0]
+# --- 8. Near Miss Table & Heatmap (Combined) ---
+st.markdown("<div style='margin-top: -30px;'></div>", unsafe_allow_html=True) # Pull up Row 3
+col_nm, col_map = st.columns([1, 1])
 
-# Layout: KPI Card (Left) vs Priority Table (Right)
-c_kpi, c_table = st.columns([1, 3])
-
-with c_kpi:
-    st.markdown(f"""
-    <div class="metric-card">
-        <h3>Pending Near Miss</h3>
-        <h2 style="color: #FF4B4B;">{pending_high_risk}</h2>
-        <p style="color:grey; font-size:0.8rem;">Open 'Near Miss' findings</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with c_table:
-    st.markdown("##### Near Miss Findings")
+with col_nm:
+    st.subheader("Near Miss Findings")
+    st.caption("High-priority near misses requiring immediate attention.")
     high_risk_df = df_master_filtered[df_master_filtered['temuan_kategori'] == 'Near Miss']
 
     if not high_risk_df.empty:
@@ -316,17 +442,16 @@ with c_table:
         st.dataframe(
             high_risk_df[valid_cols].head(20),
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            height=280 # Compact Height
         )
     else:
         st.success("No 'Near Miss' findings found in this filter selection.")
 
-st.markdown("<br><br>", unsafe_allow_html=True)
-
-# --- 9. Mini Heatmap (New Requirement) ---
-with st.container():
+with col_map:
     st.subheader("Heatmaps (Folium)")
-    st.caption("Intensity of findings based on location frequency.")
+    st.caption("Spatial intensity of findings.")
+    # st.caption("Intensity of findings based on location frequency.")
     
     if 'lat' in df_master_filtered.columns and 'lon' in df_master_filtered.columns:
         df_geo_home = df_master_filtered.dropna(subset=['lat', 'lon'])
@@ -336,9 +461,6 @@ with st.container():
             center_lat = -5.585357333271365
             center_lon = 105.38785245329919
             
-            # Use Session State to prevent re-rendering if data hasn't changed
-            # Key depends on data length to allow updates when filter changes
-            # Note: We use a simple key strategy. Ideally, hash the dataframe or filter state.
             map_key = f"map_home_{len(df_geo_home)}" 
             
             if map_key not in st.session_state:
@@ -353,19 +475,18 @@ with st.container():
                 HeatMap(heat_data, radius=12, blur=8).add_to(m_home)
                 
                 # --- Custom Legend for Heatmap ---
-                # Folium HeatMap uses a default gradient (blue->cyan->lime->yellow->red)
                 legend_html = '''
                 {% macro html(this, kwargs) %}
                 <div style="
                     position: fixed; 
-                    bottom: 50px; left: 50px; width: 250px; height: 80px; 
-                    background-color: white; border:2px solid grey; z-index:9999; font-size:14px;
-                    border-radius: 10px; padding: 10px; opacity: 0.9;">
-                    <b>Heatmap Findings Intensity</b><br>
-                    <div style="background: linear-gradient(to right, blue, cyan, lime, yellow, red); width: 100%; height: 15px; margin-top: 5px;"></div>
-                    <div style="display: flex; justify-content: space-between; font-size: 12px;">
-                        <span>Low (Sparse)</span>
-                        <span>High (Dense)</span>
+                    bottom: 30px; left: 30px; width: 200px; height: 60px; 
+                    background-color: white; border:2px solid grey; z-index:9999; font-size:12px;
+                    border-radius: 10px; padding: 5px; opacity: 0.9;">
+                    <b>Heatmap Intensity</b><br>
+                    <div style="background: linear-gradient(to right, blue, cyan, lime, yellow, red); width: 100%; height: 10px; margin-top: 5px;"></div>
+                    <div style="display: flex; justify-content: space-between; font-size: 10px;">
+                        <span>Low</span>
+                        <span>High</span>
                     </div>
                 </div>
                 {% endmacro %}
@@ -378,7 +499,8 @@ with st.container():
                 st.session_state[map_key] = m_home
             
             # Display Map using session state object
-            st_folium(st.session_state[map_key], height=400, width="100%", returned_objects=[])
+            # Height 280 to match table
+            st_folium(st.session_state[map_key], height=280, width="100%", returned_objects=[])
         else:
             st.info("No spatial data available for heatmap.")
     else:

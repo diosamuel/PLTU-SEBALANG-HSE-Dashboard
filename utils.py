@@ -16,11 +16,28 @@ def load_css():
         color: #00526A;
     }
     
+    /* COMPACT LAYOUT OVERRIDES */
+    .block-container {
+        padding-top: 1rem !important; /* Reduce top padding drastically */
+        padding-bottom: 1rem !important;
+        padding-left: 2rem !important; 
+        padding-right: 2rem !important;
+        max-width: 100% !important;
+    }
+    
     /* Text Color & Visibility */
     h1, h2, h3, h4, h5, h6, p, div, span, label, .stMarkdown {
         color: #00526A !important;
         text-shadow: none !important;
     }
+    
+    /* Headers */
+    h1 { font-size: 1.8rem !important; margin-bottom: 0.5rem !important; }
+    h3 { font-size: 1.2rem !important; margin-bottom: 0 !important; }
+    p { font-size: 0.9rem !important; }
+
+    /* Gap Reduction */
+    .element-container { margin-bottom: 0.5rem !important; }
     
     /* Sidebar Styling - Solid Background for readability */
     [data-testid="stSidebar"] {
@@ -28,21 +45,26 @@ def load_css():
         border-right: 1px solid #CBECF5;
     }
     
-    /* Metric Cards - Translucent */
+    /* Metric Cards - Compact */
     .metric-card {
         background: rgba(255, 255, 255, 0.6); /* Translucent White */
-        padding: 15px;
-        border-radius: 15px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        padding: 5px 5px; /* Reduced vertical padding */
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
         text-align: center;
         border: 1px solid rgba(255, 255, 255, 0.5);
-        min-height: 180px;
+        min-height: auto; /* Allow auto height for compactness */
+        height: 100%;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
         backdrop-filter: blur(10px); /* Frosted Glass Effect */
+        margin-bottom: 5px;
     }
+    .metric-card h3 { font-size: 0.9rem !important; margin: 0 !important; opacity: 0.8; line-height: 1.1; }
+    .metric-card h2 { font-size: 1.4rem !important; margin: 0 !important; font-weight: 700; line-height: 1.1; }
+    .metric-card p { font-size: 0.7rem !important; margin: 0 !important; opacity: 0.7; line-height: 1.1; }
     
     /* Chart Containers */
     .plot-container {
@@ -54,6 +76,7 @@ def load_css():
         background-color: rgba(255, 255, 255, 0.7) !important;
         color: #00526A !important;
         border: 1px solid rgba(0, 82, 106, 0.2) !important;
+        min-height: 38px;
     }
     
     /* Dataframe/Table */
@@ -102,6 +125,47 @@ def load_css():
         color: #FFFFFF !important;
     }
 
+    /* Reduce vertical spacing in main area */
+    div[data-testid="stVerticalBlock"] > div {
+        gap: 0.5rem !important;
+    }
+    </style>
+    
+    """, unsafe_allow_html=True)
+
+def set_header_title(title):
+    st.markdown(f"""
+    <style>
+    /* Mobile/Tablet Adjustment */
+    @media (max-width: 640px) {{
+        header[data-testid="stHeader"]::before {{
+            content: "{title}";
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1rem;
+            font-weight: 700;
+            color: #00526A;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 60%;
+        }}
+    }}
+    /* Desktop */
+    @media (min-width: 641px) {{
+        header[data-testid="stHeader"]::before {{
+            content: "{title}";
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #00526A;
+        }}
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -199,7 +263,7 @@ def render_sidebar(df_master, df_exploded):
     load_css()
     
     # Reverted to Wikimedia Logo as requested
-    st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/2/20/Logo_PLN.svg", width=100)
+    st.sidebar.image("https://kehatitenayan.web.id/static/media/PLN-NP.a8c9cf3c76844681aca8.png", width=200)
         
     st.sidebar.title("HSE Filter")
 
@@ -225,7 +289,7 @@ def render_sidebar(df_master, df_exploded):
         max_value=max_date
     )
 
-    granularity = st.sidebar.radio("Granularity", ["Monthly", "Daily"], horizontal=True)
+    granularity = st.sidebar.radio("Granularity", ["Monthly", "Weekly"], horizontal=True)
 
     start_date, end_date = date_range if len(date_range) == 2 else (min_date, max_date)
 
@@ -260,7 +324,7 @@ def render_sidebar(df_master, df_exploded):
         # Use filtered values or original? Usually dependent filters are better.
         roles = ['All'] + sorted(df_master_filtered['team_role'].astype(str).unique().tolist())
         # Use index=0 (All)
-        selected_role = st.sidebar.selectbox("Team Role", roles)
+        selected_role = st.sidebar.selectbox("Department", roles)
         if selected_role != 'All':
             df_master_filtered = df_master_filtered[df_master_filtered['team_role'] == selected_role]
 

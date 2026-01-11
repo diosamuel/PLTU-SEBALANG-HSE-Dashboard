@@ -4,23 +4,21 @@ import plotly.express as px
 import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
-from utils import load_data, render_sidebar
+from utils import load_data, render_sidebar, set_header_title
 
 # Page Config
-st.set_page_config(page_title="Personnel Performance - HSE", page_icon=None, layout="wide")
+st.set_page_config(page_title="Personnel Performance", page_icon=None, layout="wide")
 
 # Loaded via utils.render_sidebar()
 
 # Data
 df_exploded, df_master, _ = load_data()
 df_master_filtered, _ = render_sidebar(df_master, df_exploded)[:2]
+set_header_title("Personnel Performance")
 
-st.title("Personnel Performance")
+
 
 # --- A. KPI Row ---
-# --- A. KPI Row ---
-st.subheader("Performance Overview")
-
 # KPI Logic
 unique_reporters = df_master_filtered['creator_name'].nunique() if 'creator_name' in df_master_filtered.columns else 0
 
@@ -56,81 +54,360 @@ with c2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# --- B. Department Performance ---
-with st.container():
-    st.subheader("Department Performance")
+# --- Tabs for Analysis ---
+# --- C. Data Processing for Tabs ---
+dept_col = 'team_role' if 'team_role' in df_master_filtered.columns else None
+df_dept = pd.DataFrame()
+
+if dept_col:
+    # 1. Calculate detailed breakdown
+    df_dept = df_master_filtered.groupby(dept_col).agg(
+        Total=('kode_temuan', 'nunique'),
+        Closed=('temuan_status', lambda x: (x.str.lower() == 'closed').sum())
+    ).reset_index()
     
-    dept_col = 'team_role' if 'team_role' in df_master_filtered.columns else None
+    df_dept['Open'] = df_dept['Total'] - df_dept['Closed']
+    df_dept['Compliance%'] = (df_dept['Closed'] / df_dept['Total'] * 100).round(1)
     
-    if dept_col:
-        # 1. Calculate detailed breakdown
-        df_dept = df_master_filtered.groupby(dept_col).agg(
-            Total=('kode_temuan', 'nunique'),
-            Closed=('temuan_status', lambda x: (x.str.lower() == 'closed').sum())
-        ).reset_index()
+    # Calculate Radar Metrics
+    # Activeness Point = Total Findings
+    # Effort Factor = Closed Findings
+    # RCI = (Activeness * 0.5 + Effort * 0.5)
+    df_dept['Activeness'] = df_dept['Total']
+    df_dept['Effort'] = df_dept['Closed']
+    df_dept['RCI'] = (df_dept['Activeness'] * 0.5 + df_dept['Effort'] * 0.5)
+    
+    # Sort so highest volume is at the top
+    df_dept = df_dept.sort_values('Total', ascending=True)
+
+# --- Tabs for Analysis ---
+tab_dept, tab_personnel = st.tabs(["Department", "Personnel"])
+
+# =============================================
+# TAB 1: DEPARTMENT (Grid Layout)
+# =============================================
+with tab_dept:
+    # Create 3-column grid: Left 2/3 for charts, Right 1/3 for radar
+    col_left, col_right = st.columns([2, 1])
+    
+    with col_left:
+        # --- Row 1: Department Performance ---
+        st.subheader("Department Performance")
+        st.caption("Total volume vs. completion status by department.")
+    
+        if not df_dept.empty:
+            # View Options
+            c_view, _ = st.columns([1, 2])
+            dept_view = c_view.radio("View Layout:", ["Scrollable", "Fit to Screen"], horizontal=True, label_visibility="collapsed", key="dept_view_radio")
+            
+            # Truncate long department names (max 30 chars)
+            def truncate_dept(name, limit=30):
+                name = str(name)
+                return name[:limit] + "..." if len(name) > limit else name
+            
+            df_dept['DisplayDept'] = df_dept[dept_col].apply(truncate_dept)
+            
+            # 2. Create Stacked Horizontal Bar Chart (Reuse df_dept)
+            fig_dept = go.Figure()
+
+            fig_dept.add_trace(go.Bar(
+                y=df_dept['DisplayDept'],
+                x=df_dept['Closed'],
+                name='Closed',
+                orientation='h',
+                marker_color='#00526A',
+                text=df_dept['Closed'],  # Count labels
+                textposition='inside',
+                textfont=dict(color='white'),
+                hovertemplate="<b>%{y}</b><br>Closed: %{x}<extra></extra>"
+            ))
+
+            fig_dept.add_trace(go.Bar(
+                y=df_dept['DisplayDept'],
+                x=df_dept['Open'],
+                name='Open',
+                orientation='h',
+                marker_color='#FF4B4B',
+                text=df_dept['Open'],  # Count labels
+                textposition='inside',
+                textfont=dict(color='white'),
+                hovertemplate="<b>%{y}</b><br>Open: %{x}<extra></extra>"
+            ))
+
+            # Annotations for compliance %
+            for i, row in df_dept.iterrows():
+                fig_dept.add_annotation(
+                    x=row['Total'],
+                    y=row['DisplayDept'],
+                    text=f" <b>{row['Compliance%']}%</b>",
+                    showarrow=False,
+                    xanchor='left',
+                    font=dict(size=11, color="#00526A")
+                )
+            
+            if dept_view == "Scrollable":
+                # Dynamic height based on number of departments
+                unique_depts = df_dept[dept_col].nunique()
+                dynamic_height = max(300, unique_depts * 40)
+                
+                # Get X range for consistent axis
+                x_max = df_dept['Total'].max() * 1.2 if not df_dept.empty else 10
+                
+                # --- 1. Fixed Header (X-Axis) ---
+                fig_header = go.Figure()
+                fig_header.add_trace(go.Scatter(x=[0], y=[0], mode='markers', marker=dict(opacity=0)))
+                fig_header.update_layout(
+                    xaxis=dict(range=[0, x_max], side="top", color="#00526A", showgrid=False),
+                    yaxis=dict(visible=False),
+                    height=25,
+                    margin=dict(l=180, r=60, t=25, b=0),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    showlegend=False
+                )
+                st.plotly_chart(fig_header, use_container_width=True, config={'displayModeBar': False})
+                
+                # Legend outside scroll area (right aligned)
+                st.markdown("""
+                <div style='display:flex; justify-content:flex-end; gap:15px; margin-top:-10px; margin-bottom:5px; margin-right:10px; font-size:0.8rem;'>
+                    <span><span style='display:inline-block;width:12px;height:12px;background:#00526A;margin-right:4px;'></span>Closed</span>
+                    <span><span style='display:inline-block;width:12px;height:12px;background:#FF4B4B;margin-right:4px;'></span>Open</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # --- 2. Scrollable Body (Bars) ---
+                fig_dept.update_layout(
+                    barmode='stack',
+                    bargap=0.3, 
+                    title=None,
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#00526A"),
+                    showlegend=False,  # Legend moved outside
+                    yaxis=dict(title=None, color="#00526A", tickfont=dict(size=10)),
+                    xaxis=dict(range=[0, x_max], visible=False),
+                    height=dynamic_height, 
+                    margin=dict(l=180, r=60, t=0, b=10)  # Reduced top margin
+                )
+                
+                import streamlit.components.v1 as components
+                chart_html = fig_dept.to_html(include_plotlyjs='cdn', full_html=False, config={'displayModeBar': False})
+                components.html(chart_html, height=250, scrolling=True)
+            else:
+                # Fit to Screen - show all labels
+                fig_dept.update_layout(
+                    barmode='stack',
+                    bargap=0.3, 
+                    title=None,
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#00526A"),
+                    showlegend=True,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    yaxis=dict(title=None, color="#00526A", tickfont=dict(size=9), automargin=True, dtick=1),
+                    xaxis=dict(title="Count", color="#00526A", gridcolor='rgba(0,0,0,0.1)'),
+                    height=350, 
+                    margin=dict(l=180, r=60, t=30, b=10)
+                )
+                st.plotly_chart(fig_dept, use_container_width=True)
+        else:
+            st.info("Department data (team_role) not found.")
         
-        df_dept['Open'] = df_dept['Total'] - df_dept['Closed']
-        df_dept['Compliance%'] = (df_dept['Closed'] / df_dept['Total'] * 100).round(1)
+        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+
+        # --- Row 2: Risk Category Matrix ---
+        st.subheader("Department Temuan Kategori Matrix")
+        st.caption("Findings breakdown by department and risk category.")
         
-        # Sort so highest volume is at the top
-        df_dept = df_dept.sort_values('Total', ascending=True)
-
-        # 2. Create Stacked Horizontal Bar Chart
-        fig_dept = go.Figure()
-
-        fig_dept.add_trace(go.Bar(
-            y=df_dept[dept_col],
-            x=df_dept['Closed'],
-            name='Closed',
-            orientation='h',
-            marker_color='#00526A',
-            hovertemplate="<b>%{y}</b><br>Closed: %{x}<extra></extra>"
-        ))
-
-        fig_dept.add_trace(go.Bar(
-            y=df_dept[dept_col],
-            x=df_dept['Open'],
-            name='Open',
-            orientation='h',
-            marker_color='#FF4B4B',
-            hovertemplate="<b>%{y}</b><br>Open: %{x}<extra></extra>"
-        ))
-
-        # 3. Layout Styling
-        fig_dept.update_layout(
-            barmode='stack',
-            bargap=0.5, 
-            title="<b>Department Performance Breakdown</b><br><sup style='color:#00526A'>Total Volume vs. Completion Status</sup>",
-            paper_bgcolor="rgba(0,0,0,0)", 
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#00526A"),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            yaxis=dict(title=None, color="#00526A", tickfont=dict(size=12)),
-            xaxis=dict(title="Number of Findings", color="#00526A", gridcolor='rgba(0,0,0,0.1)'),
-            height=650, 
-            margin=dict(l=10, r=80, t=100, b=10)
+        if 'team_role' in df_master_filtered.columns and 'temuan_kategori' in df_master_filtered.columns:
+            # 1. Create the base matrix
+            df_matrix = df_master_filtered.groupby(['team_role', 'temuan_kategori']).size().reset_index(name='Count')
+            
+            # Truncate long department names (max 30 chars)
+            def truncate_role(name, limit=30):
+                name = str(name)
+                return name[:limit] + "..." if len(name) > limit else name
+        
+        df_matrix['DisplayRole'] = df_matrix['team_role'].apply(truncate_role)
+        
+        # 2. View Options
+        c_view, _ = st.columns([1, 2])
+        matrix_view = c_view.radio("View Layout:", ["Scrollable", "Fit to Screen"], horizontal=True, label_visibility="collapsed", key="matrix_view_radio")
+        
+        # 3. Define Scale
+        custom_scale = [
+            [0.0, 'rgba(0,0,0,0)'],       
+            [0.0001, '#96B3D2'],          
+            [1.0, '#00526A']              
+        ]
+        
+        fig_matrix = px.density_heatmap(
+            df_matrix, 
+            x='temuan_kategori', 
+            y='DisplayRole',  # Use truncated names
+            z='Count', 
+            color_continuous_scale=custom_scale,
+            text_auto=True  # Add count labels inside boxes
         )
-
-        for i, row in df_dept.iterrows():
-            fig_dept.add_annotation(
-                x=row['Total'],
-                y=row[dept_col],
-                text=f" <b>{row['Compliance%']}% Closed</b>",
-                showarrow=False,
-                xanchor='left',
-                font=dict(size=11, color="#00526A")
-            )
         
-        st.plotly_chart(fig_dept, use_container_width=True)
-    else:
-        st.info("Department data (team_role) not found.")
+        fig_matrix.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", 
+            plot_bgcolor="rgba(0,0,0,0)", 
+            margin=dict(t=30, l=200, r=10, b=30), # Increased left margin for labels
+            font=dict(color="#00526A"),
+            yaxis=dict(title=None),  # Remove y-axis title
+            xaxis=dict(title=None)   # Remove x-axis title too for consistency
+        )
+        # Add gaps
+        fig_matrix.update_traces(xgap=3, ygap=3, textfont=dict(color="white", size=12))
 
-st.markdown("<br>", unsafe_allow_html=True)
+        if matrix_view == "Scrollable":
+            # Get unique categories for X-axis header
+            categories = df_matrix['temuan_kategori'].unique().tolist()
+            
+            # Split Layout: Scrollable Chart vs Fixed Legend
+            c_scroll, c_fixed = st.columns([6, 1])
+            
+            with c_scroll:
+                # Dynamic height calculation
+                unique_roles = df_matrix['team_role'].nunique()
+                dynamic_height = max(400, unique_roles * 40)
+                
+                # --- 1. Fixed Header (X-Axis Categories) ---
+                fig_header = go.Figure()
+                # Create dummy scatter for each category position
+                for i, cat in enumerate(categories):
+                    fig_header.add_trace(go.Scatter(
+                        x=[i], y=[0], mode='text', text=[cat],
+                        textposition='bottom center',
+                        textfont=dict(color='#00526A', size=11),
+                        hoverinfo='none'
+                    ))
+                fig_header.update_layout(
+                    xaxis=dict(range=[-0.5, len(categories)-0.5], visible=False),
+                    yaxis=dict(visible=False),
+                    height=35,
+                    margin=dict(l=200, r=10, t=5, b=5),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    showlegend=False
+                )
+                st.plotly_chart(fig_header, use_container_width=True, config={'displayModeBar': False})
+                
+                # Reduce gap
+                st.markdown("<div style='margin-top:-20px;'></div>", unsafe_allow_html=True)
+                
+                # --- 2. Scrollable Body (Heatmap) ---
+                # Hide legend on the main scrolling chart
+                fig_matrix.update_traces(showscale=False)
+                fig_matrix.update_layout(
+                    height=dynamic_height,
+                    yaxis=dict(autorange="reversed", automargin=True),
+                    xaxis=dict(visible=False),  # Hide X-axis on scrollable body
+                    margin=dict(l=200, r=10, t=10, b=10),
+                    coloraxis_showscale=False
+                )
+                
+                import streamlit.components.v1 as components
+                html_code = fig_matrix.to_html(include_plotlyjs='cdn', full_html=False, config={'displayModeBar': False})
+                components.html(html_code, height=250, scrolling=True)
+            
+            with c_fixed:
+                # Fixed Legend (Dummy Plot)
+                z_max = df_matrix['Count'].max() if not df_matrix.empty else 1
+                
+                fig_legend = go.Figure()
+                fig_legend.add_trace(go.Scatter(
+                    x=[None], y=[None],
+                    mode='markers',
+                    marker=dict(
+                        colorscale=custom_scale,
+                        showscale=True,
+                        cmin=0, cmax=z_max,
+                        color=[0, z_max],
+                        colorbar=dict(
+                            title="Count",
+                            titleside="right",
+                            thickness=15,
+                            len=0.8,
+                            titlefont=dict(color="#00526A", size=12),
+                            tickfont=dict(color="#00526A", size=10)
+                        )
+                    ),
+                    hoverinfo='none'
+                ))
+                fig_legend.update_layout(
+                    xaxis=dict(visible=False), 
+                    yaxis=dict(visible=False),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    height=450, 
+                    margin=dict(t=20, b=20, l=0, r=40)
+                )
+                st.plotly_chart(fig_legend, use_container_width=True)
+            
+        else:
+            # Fit to screen (default standard)
+            fig_matrix.update_layout(yaxis=dict(automargin=True))
+            st.plotly_chart(fig_matrix, use_container_width=True)
+    # End of col_left (Dept Performance + Risk Category Matrix)
 
-# --- C. Productivity Scatter ---
-with st.container():
-    st.subheader("Productivity Matrix (Volume vs Activity)")
+    with col_right:
+        # --- Dept Radar Chart ---
+        st.subheader("Dept Reporting Culture")
+        st.caption("3-axis radar: Activeness, Effort, RCI.")
+        
+        if not df_dept.empty and dept_col:
+            all_depts = df_dept[dept_col].tolist()
+            top_3_rci = df_dept.sort_values('RCI', ascending=False).head(3)[dept_col].tolist()
+            selected_radar_depts = st.multiselect("Departments:", all_depts, default=top_3_rci, key="radar_depts")
+            
+            if selected_radar_depts:
+                df_radar = df_dept[df_dept[dept_col].isin(selected_radar_depts)]
+                fig_radar = go.Figure()
+                text_positions = ['top center', 'bottom center', 'middle left', 'middle right', 'top left', 'top right']
+                
+                for trace_idx, (index, row) in enumerate(df_radar.iterrows()):
+                    categories = ['RCI', 'Effort Factor<br>(Closing Count)', 'Activeness Point<br>(Findings Count)']
+                    values = [row['RCI'], row['Effort'], row['Activeness']]
+                    categories = categories + [categories[0]]
+                    values = values + [values[0]]
+                    text_vals = [f"{row['RCI']:.1f}", f"{int(row['Effort'])}", f"{int(row['Activeness'])}", ""]
+                    pos = text_positions[trace_idx % len(text_positions)]
+                    
+                    fig_radar.add_trace(go.Scatterpolar(
+                        r=values,
+                        theta=categories,
+                        fill=None,
+                        name=row[dept_col],
+                        text=text_vals,
+                        mode='lines+markers+text',
+                        textposition=pos,
+                        textfont=dict(size=12),
+                        hovertemplate=f"<b>{row[dept_col]}</b><br>%{{theta}}: %{{r:.1f}}<extra></extra>"
+                    ))
+                
+                fig_radar.update_layout(
+                    polar=dict(radialaxis=dict(visible=True, showline=False, gridcolor="rgba(0,0,0,0.1)"), bgcolor="rgba(0,0,0,0)"),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#00526A"),
+                    showlegend=True,
+                    legend=dict(orientation="h", yanchor="top", y=-0.1, xanchor="center", x=0.5),
+                    height=600,
+                    margin=dict(t=10, b=10, l=40, r=40)
+                )
+                st.plotly_chart(fig_radar, use_container_width=True)
+            else:
+                st.info("Select departments to view Radar.")
+        else:
+            st.info("No data for Radar Chart.")
+
+# =============================================
+# TAB 2: PERSONNEL
+# =============================================
+with tab_personnel:
+    st.subheader("Personnel Productivity")
+    st.caption("Workload analysis: Total Reports vs. Total Closed.")
     
     if 'creator_name' in df_master_filtered.columns:
         # Group by Reporter
@@ -157,48 +434,63 @@ with st.container():
         if 'Role' in df_perf.columns: hover_cols.append('Role')
         if 'Team Role' in df_perf.columns: hover_cols.append('Team Role')
         
-        fig_scatter = px.scatter(df_perf, x='Total Findings', y='Open Count', 
+        fig_scatter = px.scatter(df_perf, x='Total Findings', y='Closed Count', 
                                  hover_data=hover_cols,
                                  # text='Reporter', # Removed to prevent clutter
                                  size='Total Findings', 
                                  size_max=40, # Make bubbles slightly larger
                                  color='Closed Count',
                                  color_continuous_scale='Teal',
-                                 title="<b>Workload Analysis</b><br><sup style='color:#00526A'>X: Total Reports | Y: Active Open Findings | Color: Closed Count</sup>")
+                                 title="<br><sup style='color:#00526A'>X: Total Reports | Y: Total Closed | Color: Closed Count</sup>")
         
         # fig_scatter.update_traces(textposition='top center') # Removed
         fig_scatter.update_traces(marker=dict(opacity=0.7, line=dict(width=1, color='DarkSlateGrey')))
         
-        # Add labels only for Top 5 busiest (by Total Findings)
-        top_reporters = df_perf.nlargest(5, 'Total Findings')
+        # Add labels only for Top 10 busiest (by Total Findings)
+        top_reporters = df_perf.nlargest(10, 'Total Findings')
+        max_closed = df_perf['Closed Count'].max() if not df_perf.empty else 1
+        
         for i, row in top_reporters.iterrows():
+            # Truncate name to first word + "..."
+            short_name = str(row['Reporter']).split()[0] + "..." if len(str(row['Reporter']).split()) > 1 else row['Reporter']
+            
+            # Dynamic label color: Light if high Closed Count (dark bubble), Dark if low
+            intensity = row['Closed Count'] / max_closed if max_closed > 0 else 0
+            label_color = "black" if intensity > 0.5 else "#00526A"
+            
             fig_scatter.add_annotation(
                 x=row['Total Findings'],
-                y=row['Open Count'],
-                text=row['Reporter'],
+                y=row['Closed Count'],
+                text=short_name,
                 showarrow=False,
                 yshift=10,
-                font=dict(size=10, color="#00526A")
+                font=dict(size=10, color=label_color),
+                bgcolor="rgba(255,255,255,0.7)",  # Semi-transparent white background
+                bordercolor="black",
+                borderwidth=1,
+                borderpad=2
             )
             
         fig_scatter.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                                   font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")),
-                                  xaxis=dict(color="#00526A"), yaxis=dict(color="#00526A"))
+                                  xaxis=dict(color="#00526A"), yaxis=dict(color="#00526A"),
+                                  margin=dict(l=0, r=0, t=30, b=10), height=500)
         st.plotly_chart(fig_scatter, use_container_width=True)
     else:
         st.info("No reporter data available.")
 
-# --- D. Personnel Detail ---
-with st.container():
-    st.subheader("Individual Detail")
+    # --- E. Personnel Detail (inside tab_personnel) ---
+    with st.container():
+        st.subheader("Individual Detail")
     
-    # --- Filters for Fast Finding ---
+    # --- Filters for Fast Finding (Compass Layout) ---
     roles_list = ["All"] + sorted(df_master_filtered['role'].dropna().unique().tolist()) if 'role' in df_master_filtered.columns else ["All"]
     teams_list = ["All"] + sorted(df_master_filtered['team_role'].dropna().unique().tolist()) if 'team_role' in df_master_filtered.columns else ["All"]
     
-    c_filt1, c_filt2 = st.columns(2)
-    sel_role = c_filt1.selectbox("Filter by Role:", roles_list)
-    sel_team = c_filt2.selectbox("Filter by Team:", teams_list)
+    col_f1, col_f2, col_f3 = st.columns(3) # 3 Column Layout
+    
+    sel_role = col_f1.selectbox("Filter by Role:", roles_list)
+    sel_team = col_f2.selectbox("Filter by Department:", teams_list)
     
     # Filter Logic for selection list
     df_reporters = df_master_filtered.copy()
@@ -209,7 +501,7 @@ with st.container():
         
     reporters = sorted(df_reporters['creator_name'].dropna().unique()) if 'creator_name' in df_reporters.columns else []
     
-    selected_reporter = st.selectbox("Select Personnel", options=reporters)
+    selected_reporter = col_f3.selectbox("Select Personnel", options=reporters)
     
     if selected_reporter:
         # Data reported by this person
@@ -229,27 +521,39 @@ with st.container():
         role = df_reported_by['role'].iloc[0] if 'role' in df_reported_by.columns else "Unknown Role"
         team_role = df_reported_by['team_role'].iloc[0] if 'team_role' in df_reported_by.columns else "Unknown Team"
         
-        col_header, _ = st.columns([2, 1])
-        with col_header:
+        # --- COMPACT HEADER ROW (Name + Stats) ---
+        c_head, c_stats = st.columns([1.5, 1])
+        
+        with c_head:
             st.markdown(f"""
-            <h2 style='margin-bottom:0;'>{selected_reporter}</h2>
-            <div style='display:flex; gap: 20px; align-items: baseline;'>
-                <div>
-                    <h4 style='margin-bottom:0; color:#00526A;'>{role}</h4>
-                    <span style='font-size:0.8rem; color:grey;'>(role)</span>
+            <h3 style='margin-bottom:0;'>{selected_reporter}</h3>
+            <div style='display:flex; gap: 15px; align-items: baseline;'>
+                <div><b style='color:#00526A;'>{role}</b> <span style='font-size:0.8rem; color:grey;'>(role)</span></div>
+                <div><b style='color:#00526A;'>{team_role}</b> <span style='font-size:0.8rem; color:grey;'>(team)</span></div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with c_stats:
+            # Inline Stats
+            st.markdown(f"""
+            <div style="display:flex; gap: 10px; justify-content: flex-end;">
+                <div style="background: rgba(255,255,255,0.6); padding:5px 10px; border-radius:8px; border: 1px solid #CBECF5; text-align:center;">
+                    <span style="font-size:0.7rem; color:grey;">Reports</span>
+                    <h3 style="margin:0; color:#00526A; font-size:1.2rem;">{df_reported_by.shape[0]}</h3>
                 </div>
-                <div>
-                    <h4 style='margin-bottom:0; color:#00526A;'>{team_role}</h4>
-                    <span style='font-size:0.8rem; color:grey;'>(team role)</span>
+                <div style="background: rgba(255,255,255,0.6); padding:5px 10px; border-radius:8px; border: 1px solid #CBECF5; text-align:center;">
+                    <span style="font-size:0.7rem; color:grey;">Closed (PIC)</span>
+                    <h3 style="margin:0; color:#00526A; font-size:1.2rem;">{closed_by_count}</h3>
                 </div>
             </div>
-            <br>
             """, unsafe_allow_html=True)
         
-        # 2. Charts & Data
-        col_chart, col_table = st.columns([1, 2])
+        st.markdown("---") # Divider
         
-        with col_chart:
+        # 2. Charts & Data (Side by Side)
+        c_pie, c_table = st.columns([1, 2])
+        
+        with c_pie:
             if 'temuan_kategori' in df_reported_by.columns:
                 risk_counts = df_reported_by['temuan_kategori'].value_counts().reset_index()
                 risk_counts.columns = ['Category', 'Count']
@@ -263,31 +567,88 @@ with st.container():
                 }
                 
                 fig_pie = px.pie(risk_counts, values='Count', names='Category',
-                                 color='Category', color_discrete_map=color_map, hole=0.4,
-                                 title=f"<b>Risk Profile</b><br><sup style='color:#00526A'>Reported Issues by Category</sup>")
+                                 color='Category', color_discrete_map=color_map, hole=0.5,
+                                 title=None) # Title removed to save space
+                
                 fig_pie.update_layout(showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                                      font=dict(color="#00526A"), title=dict(font=dict(color="#00526A")))
-                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                                      margin=dict(t=0, b=0, l=0, r=0), height=200)
+                                      
+                fig_pie.update_traces(textposition='inside', textinfo='value+percent+label')
+                
+                st.markdown("**Temuan Kategori**")
                 st.plotly_chart(fig_pie, use_container_width=True)
                 
-        with col_table:
-            # DISPLAY UPDATED STATS
-            stat_c1, stat_c2 = st.columns(2)
-            with stat_c1:
-                st.markdown(f"""
-                    <div style="background: rgba(255,255,255,0.6); padding:10px; border-radius:10px; border: 1px solid #CBECF5; text-align:center;">
-                        <p style="margin:0; font-size:0.9rem; color:grey;">Reports Submitted</p>
-                        <h3 style="margin:0; color:#00526A;">{df_reported_by.shape[0]}</h3>
-                    </div>
-                """, unsafe_allow_html=True)
-            with stat_c2:
-                st.markdown(f"""
-                    <div style="background: rgba(255,255,255,0.6); padding:10px; border-radius:10px; border: 1px solid #CBECF5; text-align:center;">
-                        <p style="margin:0; font-size:0.9rem; color:grey;">Findings Closed (as PIC)</p>
-                        <h3 style="margin:0; color:#00526A;">{closed_by_count}</h3>
-                    </div>
-                """, unsafe_allow_html=True)
+        with c_table:
+            st.markdown("**Recent Reports**")
+            st.dataframe(
+                df_reported_by[['kode_temuan', 'tanggal', 'temuan_kategori', 'temuan_status']].head(5), 
+                use_container_width=True,
+                height=200, # Match Pie Chart
+                hide_index=True
+            )
+        
+        # 3. Location Map (Where did this person report findings?)
+        st.markdown("---")
+        st.markdown("**Report Locations**")
+        
+        # Check for lat/lon data
+        # Debug: show available columns
+        has_lat = 'lat' in df_reported_by.columns
+        has_lon = 'lon' in df_reported_by.columns
+        st.caption(f"Debug: lat={has_lat}, lon={has_lon}, rows={len(df_reported_by)}")
+        
+        if has_lat and has_lon:
+            df_geo = df_reported_by.dropna(subset=['lat', 'lon'])
+            st.caption(f"After dropna: {len(df_geo)} rows with coordinates")
             
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.write("**Recent Reports Detail:**")
-            st.dataframe(df_reported_by[['kode_temuan', 'tanggal', 'temuan_kategori', 'temuan_status']].head(10), use_container_width=True)
+            if not df_geo.empty:
+                st.caption(f"{len(df_geo)} locations found")
+                
+                import folium
+                from folium.plugins import MarkerCluster
+                
+                # Fixed center (PLTU Sebalang location)
+                center_lat = -5.585357333271365
+                center_lon = 105.38785245329919
+                
+                m = folium.Map(location=[center_lat, center_lon], zoom_start=17)
+                
+                # Stadia Satellite Layer
+                folium.TileLayer(
+                    tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg',
+                    attr='&copy; Stadia Maps', name='Stadia Satellite'
+                ).add_to(m)
+                marker_cluster = MarkerCluster(name='Reports').add_to(m)
+                
+                def get_color(category):
+                    cat_lower = str(category).lower()
+                    if 'near miss' in cat_lower: return 'red'
+                    if 'unsafe condition' in cat_lower: return 'beige'
+                    if 'unsafe action' in cat_lower: return 'orange'
+                    if 'positive' in cat_lower: return 'blue'
+                    return 'cadetblue'
+                
+                for _, row in df_geo.iterrows():
+                    kategori = row.get('temuan_kategori', '-')
+                    location = row.get('nama_lokasi', '-')
+                    status = row.get('temuan_status', 'Unknown')
+                    
+                    popup_html = f"""
+                    <div style="font-family: sans-serif; color: #00526A; min-width: 150px;">
+                        <b>{kategori}</b><hr style="margin: 3px 0;">
+                        <b>Status:</b> {status}<br>
+                        <b>Location:</b> {location}
+                    </div>
+                    """
+                    
+                    folium.Marker(
+                        location=[row['lat'], row['lon']],
+                        popup=folium.Popup(popup_html, max_width=200),
+                        icon=folium.Icon(color=get_color(kategori), icon='info-sign')
+                    ).add_to(marker_cluster)
+                
+                st_folium(m, width="100%", height=300, returned_objects=[])
+            else:
+                st.info("No location data available for this reporter's findings.")
+        else:
+            st.info("Location columns (lat/lon) not found in data.")

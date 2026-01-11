@@ -4,10 +4,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
-from utils import load_data, render_sidebar
+from utils import load_data, render_sidebar, set_header_title
 
 # Page Config
-st.set_page_config(page_title="Findings Analysis - HSE", page_icon=None, layout="wide")
+st.set_page_config(page_title="Findings Analysis", page_icon=None, layout="wide")
 
 # Styling
 # Loaded via utils.render_sidebar()
@@ -15,27 +15,49 @@ st.set_page_config(page_title="Findings Analysis - HSE", page_icon=None, layout=
 # Data Loading
 df_exploded, df_master, _ = load_data()
 df_master_filtered, df_exploded_filtered, _ = render_sidebar(df_master, df_exploded)
+set_header_title("Findings Analysis")
 
-st.title("Findings Analysis")
+
+
+# --- Tabs for Compact Layout ---
+tab1, tab2, tab3 = st.tabs(["Object Analysis", "Condition Wordcloud", "Risk Flow"])
 
 # --- A. Object Analysis (Pareto/Treemap) ---
-with st.container():
-    st.subheader("Object Analysis")
+with tab1:
+    # st.subheader("Object Analysis") # Removed for compactness
 
     # Consistent color gradient (matches your Risk Matrix)
+    # Consistent color gradient (matches your Risk Matrix and Homepage theme)
+    # Using explicit hex for consistent Blue gradient
     custom_scale = [
-        [0.0, 'rgba(0,0,0,0)'],       
-        [0.0001, '#96B3D2'],          
-        [1.0, '#00526A']              
+        [0.0, '#DCEEF3'],  # Light Blue (instead of transparent)     
+        [1.0, '#00526A']   # PLN Dark Blue           
     ]
 
-    # Drill-down Filter
+    # --- COMPACT CONTROLS ROW ---
+    c_drill, c_viz, c_check, c_limit = st.columns([1.5, 1.2, 1, 1])
+    
+    # Col 1: Drill-down
     selected_parent = "All"
-    if 'temuan.nama.parent' in df_exploded_filtered.columns:
-        parent_options = ["All"] + sorted(df_exploded_filtered['temuan.nama.parent'].dropna().astype(str).unique())
-        selected_parent = st.selectbox("Drill-down by Category (Parent):", parent_options)
+    with c_drill:
+        if 'temuan.nama.parent' in df_exploded_filtered.columns:
+            parent_options = ["All"] + sorted(df_exploded_filtered['temuan.nama.parent'].dropna().astype(str).unique())
+            selected_parent = st.selectbox("Drill-down by Category (Parent):", parent_options)
+            
+    # Col 2: Viz Type
+    with c_viz:
+         viz_type = st.radio("Visualization Type:", ["Treemap", "Pareto Chart"], horizontal=True)
 
-    viz_type = st.radio("Visualization Type:", ["Treemap", "Pareto Chart"], horizontal=True)
+    # Col 3: Breakdown Checkbox (Only for Treemap)
+    with c_check:
+        st.write("") # Spacer for alignment
+        st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
+        breakdown_cat = st.checkbox("Breakdown by Category?", value=False) if viz_type == "Treemap" else False
+        
+    # Col 4: Limit
+    with c_limit:
+        limit_options = [10, 20, 50, "All"]
+        max_items = st.selectbox("Show Top N Objects:", limit_options, index=1)
 
     if 'temuan.nama' in df_exploded_filtered.columns:
         # Filter data based on selection
@@ -44,14 +66,14 @@ with st.container():
         else:
             df_analysis = df_exploded_filtered
 
-        # Limit Control
-        limit_options = [10, 20, 50, "All"]
-        max_items = st.selectbox("Show Top N Objects:", limit_options, index=1)
-        
         if viz_type == "Treemap":
             if 'temuan.nama.parent' in df_analysis.columns:
-                path = [px.Constant("All Categories"), 'temuan.nama.parent', 'temuan.nama']
-                df_obj = df_analysis.groupby(['temuan.nama.parent', 'temuan.nama']).size().reset_index(name='Count')
+                target_cols = ['temuan.nama.parent', 'temuan.nama']
+                if breakdown_cat and 'temuan_kategori' in df_analysis.columns:
+                     target_cols.append('temuan_kategori')
+                
+                path = [px.Constant("All Categories")] + target_cols
+                df_obj = df_analysis.groupby(target_cols).size().reset_index(name='Count')
                 
                 if max_items != "All":
                    top_parents = df_obj.groupby('temuan.nama.parent')['Count'].sum().nlargest(max_items).index
@@ -63,25 +85,28 @@ with st.container():
                 if max_items != "All":
                     df_obj = df_obj.head(max_items)
             
+            # --- MODIFIED: Unified Color Strategy ---
+            # Both views now use the Blue Gradient ('custom_scale') based on 'Count'
+            color_params = dict(color='Count', color_continuous_scale=custom_scale)
+
             fig = px.treemap(
                 df_obj, 
                 path=path, 
                 values='Count', 
-                color='Count',
-                color_continuous_scale=custom_scale,
-                maxdepth=2, 
+                **color_params,
+                # Depth 3 shows the extra category layer, Depth 2 stays at Object level
+                maxdepth=3 if breakdown_cat else 2, 
                 title="<b>Object Hierarchy</b><br><sup style='color:grey'>Showing Parent Categories. Click a box to see specific objects.</sup>"
             )
             
-            # --- UPDATED: Font Size and White Color ---
+            # --- KEEPING LABELS (Important) ---
             fig.update_traces(
                 root_color="white", 
                 marker_line_width=2,
                 marker_line_color="white",
-                # textfont controls the label appearance
                 textfont=dict(
-                    size=18,        # Increased font size
-                    color="white"   # Force all text to white
+                    size=18,        # Large labels
+                    color="white"   # White text for contrast
                 ),
                 texttemplate="<b>%{label}</b><br>Count: %{value}",
                 hovertemplate="<b>%{label}</b><br>Findings: %{value}<extra></extra>"
@@ -91,7 +116,8 @@ with st.container():
                 height=500, 
                 margin=dict(t=70, l=10, r=10, b=10), 
                 paper_bgcolor="rgba(0,0,0,0)", 
-                plot_bgcolor="rgba(0,0,0,0)"
+                plot_bgcolor="rgba(0,0,0,0)",
+                coloraxis_showscale=True # Shows the gradient legend
             )
             
             st.plotly_chart(fig, use_container_width=True)
@@ -154,8 +180,8 @@ with st.container():
                 st.info("No data for Pareto chart.")
 
 # --- B. Condition Wordcloud (Split: Adjectives & Nouns) ---
-with st.container():
-    st.subheader("Condition Wordcloud")
+with tab2:
+    # st.subheader("Condition Wordcloud")
     st.caption("Visualizing most frequent words (Dummy Data: Adjectives vs Nouns)")
     
     # Text Processing & Plotting Function (Reusable - Interactive & Compact)
@@ -300,106 +326,11 @@ with st.container():
 #         ... (Original Logic Frozen) ...
 # """
 
-# --- C. Risk Category Matrix ---
-with st.container():
-    st.subheader("Risk Category Matrix (Role vs Category)")
-    
-    if 'team_role' in df_master_filtered.columns and 'temuan_kategori' in df_master_filtered.columns:
-        # 1. Create the base matrix
-        df_matrix = df_master_filtered.groupby(['team_role', 'temuan_kategori']).size().reset_index(name='Count')
-        
-        # 2. View Options
-        c_view, _ = st.columns([1, 2])
-        matrix_view = c_view.radio("View Layout:", ["Scrollable", "Fit to Screen"], horizontal=True, label_visibility="collapsed")
-        
-        # 3. Define Scale
-        custom_scale = [
-            [0.0, 'rgba(0,0,0,0)'],       
-            [0.0001, '#96B3D2'],          
-            [1.0, '#00526A']              
-        ]
-        
-        fig_matrix = px.density_heatmap(
-            df_matrix, 
-            x='temuan_kategori', 
-            y='team_role', 
-            z='Count', 
-            color_continuous_scale=custom_scale
-        )
-        
-        fig_matrix.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", 
-            plot_bgcolor="rgba(0,0,0,0)", 
-            margin=dict(t=30, l=150, r=10, b=30), # Increased left margin for labels
-            font=dict(color="#00526A")
-        )
-        # Add gaps
-        fig_matrix.update_traces(xgap=3, ygap=3)
+# --- C. Risk Category Matrix (MOVED TO PERSONNEL PAGE) ---
+# Code removed and transferred to 04_Personnel.py
 
-        if matrix_view == "Scrollable":
-            # Split Layout: Scrollable Chart vs Fixed Legend
-            c_scroll, c_fixed = st.columns([6, 1])
-            
-            with c_scroll:
-                # Dynamic height calculation
-                unique_roles = df_matrix['team_role'].nunique()
-                # 40px per row, min 400px
-                dynamic_height = max(400, unique_roles * 40)
-                
-                # Hide legend on the main scrolling chart
-                fig_matrix.update_traces(showscale=False)
-                fig_matrix.update_layout(
-                    height=dynamic_height,
-                    yaxis=dict(autorange="reversed", automargin=True),
-                    margin=dict(r=10), # Reduce right margin since legend is gone
-                    coloraxis_showscale=False # Explicitly hide colorbar if managed by coloraxis
-                )
-                
-                import streamlit.components.v1 as components
-                html_code = fig_matrix.to_html(include_plotlyjs='cdn', full_html=False)
-                components.html(html_code, height=450, scrolling=True)
-            
-            with c_fixed:
-                # Fixed Legend (Dummy Plot)
-                z_max = df_matrix['Count'].max() if not df_matrix.empty else 1
-                
-                fig_legend = go.Figure()
-                fig_legend.add_trace(go.Scatter(
-                    x=[None], y=[None],
-                    mode='markers',
-                    marker=dict(
-                        colorscale=custom_scale,
-                        showscale=True,
-                        cmin=0, cmax=z_max,
-                        color=[0, z_max],
-                        colorbar=dict(
-                            title="Count",
-                            titleside="right",
-                            thickness=15,
-                            len=0.8,
-                            titlefont=dict(color="#00526A", size=12),
-                            tickfont=dict(color="#00526A", size=10)
-                        )
-                    ),
-                    hoverinfo='none'
-                ))
-                fig_legend.update_layout(
-                    xaxis=dict(visible=False), 
-                    yaxis=dict(visible=False),
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    height=450, 
-                    margin=dict(t=20, b=20, l=0, r=40)
-                )
-                st.plotly_chart(fig_legend, use_container_width=True)
-            
-        else:
-            # Fit to screen (default standard)
-            fig_matrix.update_layout(yaxis=dict(automargin=True))
-            st.plotly_chart(fig_matrix, use_container_width=True)
-# --- C. Risk Flow Analysis ---
-with st.container():
-    st.subheader("Risk Flow Analysis (Category → Object → Place)")
+with tab3:
+    # st.subheader("Risk Flow Analysis (Category → Object → Place)")
 
     if not df_exploded_filtered.empty:
         # --- Prepare Nodes & Links for Sankey ---
@@ -411,7 +342,7 @@ with st.container():
         
         # Limit Control
         limit_options = [10, 20, 50, "All"]
-        max_items = st.selectbox("Limit Flows/Nodes (Top N):", limit_options, index=1) # Default 20
+        max_items = st.selectbox("Limit Flows/Nodes (Top N):", limit_options, index=0) # Default 10
         
         if len(cols) >= 2:
             df_sankey = df_exploded_filtered[cols].dropna().copy()
@@ -533,13 +464,3 @@ with st.container():
         st.info("No data available.")
 
 st.markdown("<br>", unsafe_allow_html=True)
-
-# --- D. Finding Details Table ---
-with st.container():
-    st.subheader("Finding Details")
-    
-    cols_to_show = ['tanggal', 'temuan_kategori', 'temuan.nama', 'temuan.kondisi.lemma', 'temuan.tempat', 'temuan_status']
-    cols_to_show = [c for c in cols_to_show if c in df_exploded_filtered.columns]
-    
-    # Render dataframe directly to follow standard Streamlit appearance
-    st.dataframe(df_exploded_filtered[cols_to_show], use_container_width=True)
