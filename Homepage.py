@@ -149,8 +149,8 @@ with col_left:
                     # Create a period column for grouping
                     df_temp = df_master_filtered.copy()
                     df_temp['Period'] = df_temp['tanggal'].dt.to_period(period_freq).dt.to_timestamp()
-                    
-                    df_trend = df_temp.groupby(['Period', 'temuan_kategori'])['kode_temuan'].nunique().reset_index()
+                    st.write(df_temp)
+                    df_trend = df_temp.groupby(['Perddddddddddddiod', 'temuan_kategori'])['kode_temuan'].nunique().reset_index()
                     df_trend.rename(columns={'Period': 'tanggal', 'kode_temuan': 'Count'}, inplace=True)
                     
                     # Use GLOBAL HSE_COLOR_MAP
@@ -347,7 +347,7 @@ if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' 
             components.html(chart_html, height=280, scrolling=True)
             
     with col_line:
-        # Top Object Trend Line Chart
+        # Stacked Bar + Line Chart for Trend Analysis
         
         # Get Top 5 Object Names for default selection
         top_5_names = top_objects.groupby('Object')['Count'].sum().nlargest(5).index.tolist()
@@ -361,9 +361,6 @@ if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' 
             label_visibility="collapsed"
         )
         
-        # View Mode Switch
-        trend_view_mode = st.radio("Mode Tampilan:", ["Tren Total", "Rincian Kategori"], horizontal=True, key="trend_view_recurring", label_visibility="collapsed")
-        
         # Filter Data based on Selection
         if 'tanggal' in df_exploded_filtered.columns:
             if selected_trend_objects:
@@ -373,38 +370,81 @@ if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' 
             
             if not df_trend_filtered.empty:
                 # Determine frequency based on granularity
-                # Re-evaluating here in case scope is separate
                 freq_alias = 'W' if granularity == 'Mingguan' else 'M'
                 
-                # Resample by Period (Month or Day) and Object
+                # Resample by Period and Object
                 df_trend_filtered['Period'] = pd.to_datetime(df_trend_filtered['tanggal']).dt.to_period(freq_alias).dt.to_timestamp()
                 
-                if trend_view_mode == "Rincian Kategori":
-                    # Merge category info for legend
-                    df_obj_cat = df_exploded_filtered[['temuan_nama_spesifik', 'temuan_kategori']].drop_duplicates(subset=['temuan_nama_spesifik'])
-                    df_trend_filtered = df_trend_filtered.merge(df_obj_cat, on='temuan_nama_spesifik', suffixes=('', '_y'))
-                    
-                    df_line_data = df_trend_filtered.groupby(['Period', 'temuan_nama_spesifik', 'temuan_kategori']).size().reset_index(name='Count')
-                    df_line_data['LegendLabel'] = df_line_data['temuan_nama_spesifik'] + " (" + df_line_data['temuan_kategori'] + ")"
-                    color_col = 'LegendLabel'
-                else:
-                    # Total Trend View
-                    df_line_data = df_trend_filtered.groupby(['Period', 'temuan_nama_spesifik']).size().reset_index(name='Count')
-                    color_col = 'temuan_nama_spesifik'
+                # Aggregate by Period and Object
+                df_bar_data = df_trend_filtered.groupby(['Period', 'temuan_nama_spesifik']).size().reset_index(name='Count')
                 
-                # Use qualitative colors or custom if needed
-                fig_line_top = px.line(df_line_data, x='Period', y='Count', color=color_col, markers=True,
-                                        color_discrete_sequence=px.colors.qualitative.Prism,
-                                        title=None)
+                # Calculate total per period for line chart
+                df_total = df_bar_data.groupby('Period')['Count'].sum().reset_index()
+                df_total.columns = ['Period', 'Total']
                 
-                fig_line_top.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                            font=dict(color="#00526A"),
-                                            xaxis=dict(title=None, color="#00526A"),
-                                            yaxis=dict(title="Jumlah", color="#00526A"),
-                                            height=280, # Compact Height
-                                            margin=dict(l=0, r=0, t=0, b=0),
-                                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                st.plotly_chart(fig_line_top, use_container_width=True)
+                # Create figure with bars and line
+                from plotly.subplots import make_subplots
+                fig_combo = go.Figure()
+                
+                # Add stacked bars for each object
+                colors = px.colors.qualitative.Plotly
+                for idx, obj in enumerate(selected_trend_objects):
+                    df_obj = df_bar_data[df_bar_data['temuan_nama_spesifik'] == obj]
+                    fig_combo.add_trace(go.Bar(
+                        x=df_obj['Period'],
+                        y=df_obj['Count'],
+                        name=obj,
+                        marker_color=colors[idx % len(colors)],
+                        text=df_obj['Count'],
+                        textposition='inside',
+                        textfont=dict(color='white', size=10),
+                        hovertemplate='<b>%{fullData.name}</b><br>%{x|%d %b %Y}<br>Count: %{y}<extra></extra>'
+                    ))
+                
+                # Add line for total trend
+                fig_combo.add_trace(go.Scatter(
+                    x=df_total['Period'],
+                    y=df_total['Total'],
+                    name='Total',
+                    mode='lines+markers+text',
+                    line=dict(color='black', width=3),
+                    marker=dict(size=8),
+                    text=df_total['Total'],
+                    textposition='top center',
+                    textfont=dict(color='black', size=11),
+                    yaxis='y2',
+                    hovertemplate='<b>Total</b><br>%{x|%d %b %Y}<br>Total: %{y}<extra></extra>'
+                ))
+                
+                # Update layout with secondary y-axis
+                fig_combo.update_layout(
+                    barmode='stack',
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#00526A"),
+                    xaxis=dict(title=None, color="#00526A"),
+                    yaxis=dict(title="Jumlah per Objek", color="#00526A", side='left'),
+                    yaxis2=dict(
+                        title="Total", 
+                        color="black",
+                        overlaying='y',
+                        side='right',
+                        showgrid=False
+                    ),
+                    height=280,
+                    margin=dict(l=0, r=40, t=0, b=0),
+                    legend=dict(
+                        orientation="h", 
+                        yanchor="bottom", 
+                        y=1.02, 
+                        xanchor="right", 
+                        x=1,
+                        bgcolor="rgba(255,255,255,0.8)"
+                    ),
+                    hovermode='x unified'
+                )
+                
+                st.plotly_chart(fig_combo, use_container_width=True)
             else:
                 st.info("Tidak ada objek yang dipilih atau data tidak tersedia.")
         else:
