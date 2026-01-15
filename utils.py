@@ -179,8 +179,8 @@ def load_data():
             ON f.target_date_sk = dd_target.target_date_sk
         """
         
-        with engine.connect() as conn:
-            df_master = pd.read_sql(text(query), conn)
+        # Execute query using pandas with engine
+        df_master = pd.read_sql(query, engine)
 
         # --- PYTHON POST-PROCESSING ---
         
