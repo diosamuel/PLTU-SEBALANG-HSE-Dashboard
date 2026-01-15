@@ -275,124 +275,59 @@ with tab2:
     # st.subheader("Condition Wordcloud")
     st.caption("Visualisasi kata yang paling sering muncul berdasarkan data temuan")
     
-    # Interactive Wordcloud using wordcloud2.js (stable version)
+    # Static Wordcloud using Python wordcloud library
     def render_wordcloud_interactive(frequency_dict, color_scheme='blue', title=""):
         """
-        Renders an interactive wordcloud using wordcloud2.js library.
+        Renders a static wordcloud using Python wordcloud library.
         Color schemes: 'blue', 'red', 'green', 'orange', 'purple'
+        Reference: https://amueller.github.io/word_cloud/references.html
         """
-        import streamlit.components.v1 as components
-        import json
-        
         if not frequency_dict:
             st.info("Tidak ada data untuk wordcloud")
             return
         
-        # Color palettes - gradient from dark to light
-        color_palettes = {
-            'blue': ['#0D47A1', '#1565C0', '#1976D2', '#1E88E5', '#42A5F5', '#64B5F6'],
-            'red': ['#B71C1C', '#C62828', '#D32F2F', '#E53935', '#EF5350', '#E57373'],
-            'green': ['#1B5E20', '#2E7D32', '#388E3C', '#43A047', '#66BB6A', '#81C784'],
-            'orange': ['#E65100', '#EF6C00', '#F57C00', '#FB8C00', '#FFA726', '#FFB74D'],
-            'purple': ['#4A148C', '#6A1B9A', '#7B1FA2', '#8E24AA', '#AB47BC', '#BA68C8']
+        # Color schemes - using matplotlib colormaps
+        colormap_mapping = {
+            'blue': 'Blues',
+            'red': 'Reds',
+            'green': 'Greens',
+            'orange': 'Oranges',
+            'purple': 'Purples'
         }
-        colors = color_palettes.get(color_scheme, color_palettes['blue'])
+        colormap = colormap_mapping.get(color_scheme, 'Blues')
         
-        # Prepare word list: [[word, weight], ...]
-        max_freq = max(frequency_dict.values())
-        word_list = [[word, int((freq / max_freq) * 100)] for word, freq in frequency_dict.items()]
-        word_list_json = json.dumps(word_list)
-        colors_json = json.dumps(colors)
-        
-        # Generate unique canvas ID
-        import hashlib
-        canvas_id = f"wc_{hashlib.md5(str(frequency_dict).encode()).hexdigest()[:8]}"
-        
-        html_code = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
-            <style>
-                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-                body {{ 
-                    background: transparent;
-                    overflow: hidden;
-                }}
-                #container {{
-                    width: 100%;
-                    height: 350px;
-                    position: relative;
-                }}
-                #{canvas_id} {{
-                    width: 100% !important;
-                    height: 100% !important;
-                }}
-            </style>
-        </head>
-        <body>
-            <div id="container">
-                <canvas id="{canvas_id}"></canvas>
-            </div>
-            <script>
-                (function() {{
-                    const wordList = {word_list_json};
-                    const colors = {colors_json};
-                    const canvas = document.getElementById('{canvas_id}');
-                    const container = document.getElementById('container');
-                    
-                    // Set canvas size
-                    canvas.width = container.offsetWidth;
-                    canvas.height = container.offsetHeight;
-                    
-                    // Color function
-                    function getColor(word, weight) {{
-                        const idx = Math.floor((weight / 100) * (colors.length - 1));
-                        return colors[Math.min(idx, colors.length - 1)];
-                    }}
-                    
-                    // Wordcloud configuration (hover DISABLED to prevent bugs)
-                    const options = {{
-                        list: wordList,
-                        gridSize: Math.round(16 * canvas.width / 1024),
-                        weightFactor: function(size) {{
-                            return Math.pow(size, 1.3) * canvas.width / 800;
-                        }},
-                        fontFamily: 'Impact, Arial Black, sans-serif',
-                        fontWeight: 'normal',
-                        color: getColor,
-                        backgroundColor: 'transparent',
-                        rotateRatio: 0.4,
-                        rotationSteps: 2,
-                        shuffle: true,
-                        drawOutOfBound: false,
-                        shrinkToFit: true,
-                        minSize: 0,
-                        ellipticity: 0.65,
-                        wait: 0,
-                        abortThreshold: 0,
-                        abort: function() {{ return false; }}
-                        // NO HOVER - this is what causes the bug
-                    }};
-                    
-                    // Render
-                    try {{
-                        if (typeof WordCloud !== 'undefined') {{
-                            WordCloud(canvas, options);
-                        }} else {{
-                            console.error('WordCloud not loaded');
-                        }}
-                    }} catch (e) {{
-                        console.error('WordCloud error:', e);
-                    }}
-                }})();
-            </script>
-        </body>
-        </html>
-        """
-        
-        components.html(html_code, height=370, scrolling=False)
+        try:
+            # Generate wordcloud
+            wordcloud = WordCloud(
+                width=800,
+                height=400,
+                background_color=None,
+                mode='RGBA',
+                colormap=colormap,
+                relative_scaling=0.5,
+                min_font_size=10,
+                max_font_size=100,
+                prefer_horizontal=0.7,
+                font_path=None,  # Uses default font
+                collocations=False,
+                margin=10
+            ).generate_from_frequencies(frequency_dict)
+            
+            # Create matplotlib figure
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.imshow(wordcloud, interpolation='bilinear')
+            ax.axis('off')
+            fig.patch.set_alpha(0)  # Transparent background
+            ax.patch.set_alpha(0)
+            plt.tight_layout(pad=0)
+            
+            # Display in Streamlit
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+            
+        except Exception as e:
+            st.error(f"Error generating wordcloud: {e}")
+            st.info("Data yang tersedia: " + ", ".join(list(frequency_dict.keys())[:5]) + "...")
 
     # --- Real Data from DataFrame ---
     # Kata Sifat (Conditions) from temuan_kondisi column
