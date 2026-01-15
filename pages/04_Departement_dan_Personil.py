@@ -47,9 +47,8 @@ with c1:
 with c2:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Beban Kerja Maksimal</h3>
-        <h1>{max_workload} Temuan</h1>
-        <p style="color:grey; font-size:0.8rem;">Oleh: {top_pic}</p>
+        <h1>{max_workload} Temuan terbuka</h1>
+        <h4 style="color:grey; font-size:0.8rem;">Oleh: {top_pic}</h4>
     </div>
     """, unsafe_allow_html=True)
 
@@ -71,7 +70,7 @@ if dept_col:
     df_dept['Compliance%'] = (df_dept['Closed'] / df_dept['Total'] * 100).round(1)
     
     # Calculate Radar Metrics
-    # Activeness Point = Total Findings
+    # Activeness Point = Total Temuan
     # Effort Factor = Closed Findings
     # RCI = (Activeness * 0.5 + Effort * 0.5)
     df_dept['Activeness'] = df_dept['Total']
@@ -381,11 +380,14 @@ with tab_dept:
                     text_vals = [f"{row['RCI']:.1f}", f"{int(row['Effort'])}", f"{int(row['Activeness'])}", ""]
                     pos = text_positions[trace_idx % len(text_positions)]
                     
+                    # Create legend label with RCI score
+                    legend_label = f"{row[dept_col]} (RCI: {row['RCI']:.1f})"
+                    
                     fig_radar.add_trace(go.Scatterpolar(
                         r=values,
                         theta=categories,
                         fill=None,
-                        name=row[dept_col],
+                        name=legend_label,
                         text=text_vals,
                         mode='lines+markers+text',
                         textposition=pos,
@@ -428,45 +430,45 @@ with tab_personnel:
         df_perf = df_master_filtered.groupby('creator_name').agg(agg_dict).reset_index()
         
         # Renaissance Columns
-        new_cols = ['Reporter', 'Total Findings', 'Open Count']
+        new_cols = ['Reporter', 'Total Temuan', 'Open Count']
         if 'creator_role' in df_master_filtered.columns: new_cols.append('Role')
         if 'creator_departemen' in df_master_filtered.columns: new_cols.append('Team Role')
         df_perf.columns = new_cols
         
-        # Calculate Closed Count for Color
-        df_perf['Closed Count'] = df_perf['Total Findings'] - df_perf['Open Count']
+        # Calculate Total Tutup for Color
+        df_perf['Total Tutup'] = df_perf['Total Temuan'] - df_perf['Open Count']
         
         hover_cols = ['Reporter']
         if 'Role' in df_perf.columns: hover_cols.append('Role')
         if 'Team Role' in df_perf.columns: hover_cols.append('Team Role')
         
-        fig_scatter = px.scatter(df_perf, x='Total Findings', y='Closed Count', 
+        fig_scatter = px.scatter(df_perf, x='Total Temuan', y='Total Tutup', 
                                  hover_data=hover_cols,
                                  # text='Reporter', # Removed to prevent clutter
-                                 size='Total Findings', 
+                                 size='Total Temuan', 
                                  size_max=40, # Make bubbles slightly larger
-                                 color='Closed Count',
+                                 color='Total Tutup',
                                  color_continuous_scale='Teal',
                                  title="<br>")
         
         # fig_scatter.update_traces(textposition='top center') # Removed
         fig_scatter.update_traces(marker=dict(opacity=0.7, line=dict(width=1, color='DarkSlateGrey')))
         
-        # Add labels only for Top 10 busiest (by Total Findings)
-        top_reporters = df_perf.nlargest(10, 'Total Findings')
-        max_closed = df_perf['Closed Count'].max() if not df_perf.empty else 1
+        # Add labels only for Top 10 busiest (by Total Temuan)
+        top_reporters = df_perf.nlargest(10, 'Total Temuan')
+        max_closed = df_perf['Total Tutup'].max() if not df_perf.empty else 1
         
         for i, row in top_reporters.iterrows():
             # Truncate name to first word + "..."
             short_name = str(row['Reporter']).split()[0] + "..." if len(str(row['Reporter']).split()) > 1 else row['Reporter']
             
-            # Dynamic label color: Light if high Closed Count (dark bubble), Dark if low
-            intensity = row['Closed Count'] / max_closed if max_closed > 0 else 0
+            # Dynamic label color: Light if high Total Tutup (dark bubble), Dark if low
+            intensity = row['Total Tutup'] / max_closed if max_closed > 0 else 0
             label_color = "black" if intensity > 0.5 else "#00526A"
             
             fig_scatter.add_annotation(
-                x=row['Total Findings'],
-                y=row['Closed Count'],
+                x=row['Total Temuan'],
+                y=row['Total Tutup'],
                 text=short_name,
                 showarrow=False,
                 yshift=10,

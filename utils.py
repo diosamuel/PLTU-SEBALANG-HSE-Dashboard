@@ -135,7 +135,8 @@ def load_data():
             -- ============================================
             -- 5. TEMPAT/LOKASI DIMENSION (Geospatial)
             -- ============================================
-            loc.nama_lokasi,
+            -- Fallback: Use fact table tempat_id if join to dim_tempat fails
+            COALESCE(loc.nama_lokasi, f.tempat_id) AS nama_lokasi,
             loc.lat,
             loc.long AS lon,
             loc.zone AS zona

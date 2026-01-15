@@ -60,22 +60,48 @@ with col_map:
                     if 'unsafe condition' in cat_lower: return 'orange' # #F57F17 -> orange
                     if 'unsafe action' in cat_lower: return 'red'       # #B71C1C -> red/darkred
                     if 'positive' in cat_lower: return 'darkgreen'      # #1B5E20 -> darkgreen
-                    return 'cadetblue' 
+                    return 'cadetblue'
+                
+                def get_light_bg_color(category):
+                    """Get lighter background color based on HSE category"""
+                    # Light versions of HSE_COLOR_MAP colors (with transparency)
+                    light_colors = {
+                        'Positive': 'rgba(27, 94, 32, 0.15)',           # Light green
+                        'Unsafe Action': 'rgba(183, 28, 28, 0.15)',    # Light red
+                        'Unsafe Condition': 'rgba(245, 127, 23, 0.15)', # Light amber
+                        'Near Miss': 'rgba(26, 35, 126, 0.15)'         # Light indigo
+                    }
+                    return light_colors.get(category, 'rgba(255, 255, 255, 0.9)')
                 
                 for _, row in df_pins.iterrows():
+                    kode_temuan = row.get('kode_temuan', '-')
                     kategori = row.get('temuan_kategori', '-')
-                    parent = row.get('temuan.nama.parent', '-')
-                    child = row.get('temuan.nama', '-')
+                    temuan_nama = row.get('temuan_nama', '-')
                     kondisi = row.get('raw_kondisi', '-')
+                    rekomendasi = row.get('raw_rekomendasi', '-')
                     location = row.get('nama_lokasi', '-')
+                    judul = row.get('raw_judul', '-')
                     status = row.get('temuan_status', 'Unknown')
+                    opened_at = row.get('open_at', '-')
+                    closed_at = row.get('close_at', '-') 
+
+                    print(row)
+                    # Get background color based on category
+                    bg_color = get_light_bg_color(kategori)
                     
                     popup_html = f"""
-                    <div style="font-family: 'Source Sans Pro', sans-serif; color: #00526A; min-width: 200px;">
+                    <div style="font-family: 'Source Sans Pro', sans-serif; color: #00526A; min-width: 200px; 
+                                background-color: {bg_color}; padding: 10px; border-radius: 8px;">
                         <b style="font-size: 14px;">{kategori}</b><hr style="margin: 5px 0;">
                         <b>Status :</b> {status}<br>
+                        <b>Kode Temuan:</b> {kode_temuan}<br>
+                        <b>Temuan:</b> {temuan_nama}<br>
+                        <b>Judul:</b> {judul}<br>
                         <b>Kondisi:</b> {kondisi}<br>
-                        <b>Lokasi :</b> {location}
+                        <b>Rekomendasi:</b> {rekomendasi}<br>
+                        <b>Lokasi :</b> {location}<br>
+                        <b>Dibuka pada :</b> {opened_at}<br>
+                        <b>Ditutup pada :</b> {closed_at}<br>
                     </div>
                     """
                     

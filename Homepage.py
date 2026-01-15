@@ -133,7 +133,12 @@ with col_left:
 
         if 'tanggal' in df_master_filtered.columns:
             if trend_mode == "Tren Total":
-                df_trend = df_master_filtered.set_index('tanggal').resample(resample_freq)['kode_temuan'].nunique().reset_index()
+                # Use period grouping instead of resample for better month alignment
+                df_temp = df_master_filtered.copy()
+                df_temp['Period'] = df_temp['tanggal'].dt.to_period(period_freq).dt.to_timestamp()
+                df_trend = df_temp.groupby('Period')['kode_temuan'].nunique().reset_index()
+                df_trend.rename(columns={'Period': 'tanggal'}, inplace=True)
+                
                 fig_trend = px.line(df_trend, x='tanggal', y='kode_temuan', markers=True, 
                                     color_discrete_sequence=['black'],
                                     title=f"<b>Tren Temuan ({time_label})</b>")
@@ -149,8 +154,7 @@ with col_left:
                     # Create a period column for grouping
                     df_temp = df_master_filtered.copy()
                     df_temp['Period'] = df_temp['tanggal'].dt.to_period(period_freq).dt.to_timestamp()
-                    st.write(df_temp)
-                    df_trend = df_temp.groupby(['Perddddddddddddiod', 'temuan_kategori'])['kode_temuan'].nunique().reset_index()
+                    df_trend = df_temp.groupby(['Period', 'temuan_kategori'])['kode_temuan'].nunique().reset_index()
                     df_trend.rename(columns={'Period': 'tanggal', 'kode_temuan': 'Count'}, inplace=True)
                     
                     # Use GLOBAL HSE_COLOR_MAP
@@ -378,6 +382,26 @@ if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' 
                 # Aggregate by Period and Object
                 df_bar_data = df_trend_filtered.groupby(['Period', 'temuan_nama_spesifik']).size().reset_index(name='Count')
                 
+                # Create complete date range to fill missing periods
+                min_period = df_bar_data['Period'].min()
+                max_period = df_bar_data['Period'].max()
+                if granularity == 'Mingguan':
+                    all_periods = pd.date_range(start=min_period, end=max_period, freq='W')
+                else:
+                    all_periods = pd.date_range(start=min_period, end=max_period, freq='MS')  # Month Start
+                
+                # Fill missing periods for each object with 0
+                df_bar_complete = []
+                for obj in selected_trend_objects:
+                    df_obj = df_bar_data[df_bar_data['temuan_nama_spesifik'] == obj]
+                    df_obj_complete = pd.DataFrame({'Period': all_periods})
+                    df_obj_complete = df_obj_complete.merge(df_obj, on='Period', how='left')
+                    df_obj_complete['temuan_nama_spesifik'] = obj
+                    df_obj_complete['Count'] = df_obj_complete['Count'].fillna(0).astype(int)
+                    df_bar_complete.append(df_obj_complete)
+                
+                df_bar_data = pd.concat(df_bar_complete, ignore_index=True)
+                
                 # Calculate total per period for line chart
                 df_total = df_bar_data.groupby('Period')['Count'].sum().reset_index()
                 df_total.columns = ['Period', 'Total']
@@ -422,7 +446,12 @@ if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' 
                     plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#00526A"),
-                    xaxis=dict(title=None, color="#00526A"),
+                    xaxis=dict(
+                        title=None, 
+                        color="#00526A",
+                        dtick="M1" if granularity != 'Mingguan' else None,  # Force show all months
+                        tickformat="%b %Y" if granularity != 'Mingguan' else "%d %b"
+                    ),
                     yaxis=dict(title="Jumlah per Objek", color="#00526A", side='left'),
                     yaxis2=dict(
                         title="Total", 
@@ -460,7 +489,6 @@ col_nm, col_map = st.columns([1, 1])
 
 with col_nm:
     st.subheader("Temuan Near Miss ")
-    st.caption("Temuan 'Near Miss' prioritas tinggi yang membutuhkan perhatian segera.")
     high_risk_df = df_master_filtered[df_master_filtered['temuan_kategori'] == 'Near Miss']
 
     # st.write(df_master_filtered)
@@ -470,8 +498,21 @@ with col_nm:
         # Filter valid columns
         valid_cols = [c for c in cols_to_show if c in high_risk_df.columns]
         
+        # Create display dataframe with renamed columns
+        df_display = high_risk_df[valid_cols].head(20).copy()
+        
+        # Rename columns to readable Indonesian names
+        column_rename_map = {
+            'kode_temuan': 'Kode Temuan',
+            'tanggal': 'Tanggal',
+            'temuan_nama_spesifik': 'Objek Temuan',
+            'nama_lokasi': 'Lokasi',
+            'temuan_status': 'Status'
+        }
+        df_display = df_display.rename(columns=column_rename_map)
+        
         st.dataframe(
-            high_risk_df[valid_cols].head(20),
+            df_display,
             use_container_width=True,
             hide_index=True,
             height=280 # Compact Height
