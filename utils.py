@@ -28,7 +28,7 @@ def get_db_engine():
             # Fallback for manual testing if secrets aren't set up yet
             # Using credentials provided in migration plan
             
-            db_url = "postgresql://postgres.bdxkbsrnhkfjlfnxeixl:akuharusbisa@aws-1-ap-south-1.pooler.supabase.com:6543/postgres"
+            db_url = ""
         engine = create_engine(db_url)
         return engine
     except Exception as e:
