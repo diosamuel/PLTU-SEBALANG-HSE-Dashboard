@@ -440,8 +440,8 @@ with col_nm:
         st.success("Tidak ada temuan 'Near Miss' dalam seleksi filter ini.")
 
 with col_map:
-    st.subheader("Peta Panas (Folium)")
-    st.caption("Intensitas spasial temuan.")
+    st.subheader("Peta Sebaran Temuan")
+    st.caption("Intensitas sebaran temuan.")
     # st.caption("Intensity of findings based on location frequency.")
     
     if 'lat' in df_master_filtered.columns and 'lon' in df_master_filtered.columns:

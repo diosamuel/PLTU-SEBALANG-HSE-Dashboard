@@ -54,18 +54,18 @@ with tab1:
             parents = df_exploded_filtered['temuan_parent'].dropna().unique()
             parents = [p for p in parents if p and p.strip()]
             parent_options = ["Semua"] + sorted(set(parents))
-            selected_parent = st.selectbox("Filter per Kategori (Parent):", parent_options)
+            selected_parent = st.selectbox("Filter per Nama Temuan:", parent_options)
             
     # Col 2: Limit
     with c_limit:
         limit_options = [10, 20, 50, "Semua"]
-        max_items = st.selectbox("Tampilkan N Objek Teratas:", limit_options, index=1)
+        max_items = st.selectbox("Tampilkan total Objek Teratas:", limit_options, index=1)
 
     # Col 3: Breakdown Checkbox (For Treemap)
     with c_check:
         st.write("") # Spacer for alignment
         st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
-        breakdown_cat = st.checkbox("Rincian per Kategori (Treemap)?", value=False)
+        breakdown_cat = st.checkbox("Rincian per Temuan Kategori", value=False)
         
     if 'temuan_nama_spesifik' in df_exploded_filtered.columns:
         # Filter data based on parent selection
@@ -87,7 +87,7 @@ with tab1:
             if selected_parent == "Semua":
                 # Show aggregated by parent (first word)
                 col_analysis = 'temuan_parent'
-                chart_title = "<b>Kategori Parent Teratas</b>"
+                chart_title = "<b>Temuan Teratas</b>"
             else:
                 # Show specific items within the selected parent
                 col_analysis = 'temuan_nama_spesifik'
@@ -113,7 +113,7 @@ with tab1:
                 # Bar Trace (Count)
                 fig_pareto.add_trace(
                     go.Bar(x=df_plot['Object'], y=df_plot['Count'], 
-                           name="Frequency", marker_color='#00526A',
+                           name="Jumlah Temuan", marker_color='#00526A',
                            text=df_plot['Count'], textposition='outside'),
                     secondary_y=False
                 )
@@ -121,7 +121,7 @@ with tab1:
                 # Line Trace (Cumulative %)
                 fig_pareto.add_trace(
                     go.Scatter(x=df_plot['Object'], y=df_plot['Cumulative Percentage'], 
-                               name="Cumulative %", mode='lines+markers', 
+                               name="Persentase Kumulatif Temuan %", mode='lines+markers', 
                                line=dict(color='#FF4B4B')),
                     secondary_y=True
                 )
@@ -154,8 +154,8 @@ with tab1:
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#00526A"),
-                    yaxis=dict(title="Jumlah", gridcolor='rgba(0,0,0,0.1)'), # Frequency -> Jumlah
-                    yaxis2=dict(title="Persentase Kumulatif (%)", range=[0, 115], showgrid=False), # Cumulative %
+                    yaxis=dict(title="Jumlah Temuan", gridcolor='rgba(0,0,0,0.1)'), # Frequency -> Jumlah
+                    yaxis2=dict(title="Persentase Kumulatif Temuan (%)", range=[0, 115], showgrid=False), # Cumulative %
                     height=500,
                     margin=dict(t=80, l=10, r=10, b=10) # Increased top margin for title
                 )
@@ -182,7 +182,7 @@ with tab1:
                     if breakdown_cat and 'temuan_kategori' in df_analysis.columns:
                         target_cols.append('temuan_kategori')
                     
-                    path = [px.Constant("Semua Kategori")] + target_cols
+                    path = [px.Constant("Semua Temuan")] + target_cols
                     df_obj_tree = df_analysis.groupby(target_cols).size().reset_index(name='Count')
                     
                     if max_items != "Semua":
@@ -215,7 +215,7 @@ with tab1:
 
             # Dynamic title based on selection
             if selected_parent == "Semua":
-                tree_title = "<b>Treemap Temuan</b><br><sup style='color:grey'>Kata pertama sebagai parent, detail temuan sebagai child.</sup>"
+                tree_title = "<b>Treemap Temuan</b>"
             else:
                 tree_title = f"<b>Detail '{selected_parent.upper()}'</b><br><sup style='color:grey'>Semua temuan dalam kategori '{selected_parent}'.</sup>"
             
@@ -370,9 +370,9 @@ with tab2:
         
     with wc_col2:
         st.markdown("**Objek Temuan**")
-        st.caption("Objek atau komponen spesifik yang paling sering ditemukan.")
+        st.caption("Nama temuan yang paling sering ditemukan.")
         if kata_benda_data and len(kata_benda_data) > 0:
-            st.write(f"📊 {len(kata_benda_data)} objek unik ditemukan")
+            # st.write(f"📊 {len(kata_benda_data)} objek unik ditemukan")
             render_wordcloud_interactive(kata_benda_data, 'blue')
         else:
             st.info("Tidak ada data objek temuan yang valid")
@@ -400,7 +400,7 @@ with tab3:
         
         # Limit Control
         limit_options = [10, 20, 50, "All"]
-        max_items = st.selectbox("Batasi Alur/Node (N Teratas):", limit_options, index=0) # Default 10
+        max_items = st.selectbox("Total Temuan", limit_options, index=0) # Default 10
         
         if len(cols) >= 2:
             df_sankey = df_exploded_filtered[cols].dropna().copy()
@@ -539,7 +539,7 @@ with tab3:
             flow_desc = " → ".join([c.replace('temuan.', '').replace('_', ' ').title() for c in cols])
             
             fig_sankey.update_layout(
-                title=dict(text=f"<b>Analisis Alur Kategori Temuan</b><br><sup style='color:grey'>Melacak pergerakan temuan dari Kategori ke Objek ke Lokasi.</sup><br><sup style='color:#00526A'>Alur: {flow_desc}</sup>", font=dict(color="#00526A")),
+                title=dict(text=f"<b>Analisis Alur Kategori Temuan</b><br><sup style='color:grey'>Melacak pergerakan temuan dari Kategori ke Objek ke Lokasi.</sup><br>", font=dict(color="#00526A")),
                 paper_bgcolor="rgba(0,0,0,0)", 
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#00526A"),

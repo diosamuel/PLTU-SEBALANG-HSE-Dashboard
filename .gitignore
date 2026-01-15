@@ -20,3 +20,5 @@ data/
 debug_*.py
 temp_debug_merge.py
 test_folium.py
+.md/
+.streamlit/

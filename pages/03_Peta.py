@@ -66,7 +66,7 @@ with col_map:
                     kategori = row.get('temuan_kategori', '-')
                     parent = row.get('temuan.nama.parent', '-')
                     child = row.get('temuan.nama', '-')
-                    kondisi = row.get('temuan.kondisi', row.get('temuan.kondisi.lemma', '-'))
+                    kondisi = row.get('raw_kondisi', '-')
                     location = row.get('nama_lokasi', '-')
                     status = row.get('temuan_status', 'Unknown')
                     
