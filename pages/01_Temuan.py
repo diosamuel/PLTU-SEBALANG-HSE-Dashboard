@@ -37,11 +37,23 @@ with tab1:
     # --- COMPACT CONTROLS ROW ---
     c_drill, c_limit, c_check = st.columns([1.5, 1, 1])
     
-    # Col 1: Drill-down
+    # Create parent category from first word of temuan_nama_spesifik
     selected_parent = "Semua"
+    
+    if 'temuan_nama_spesifik' in df_exploded_filtered.columns:
+        # Extract first word as parent category
+        df_exploded_filtered = df_exploded_filtered.copy()
+        df_exploded_filtered['temuan_parent'] = df_exploded_filtered['temuan_nama_spesifik'].apply(
+            lambda x: str(x).split()[0].lower().strip() if pd.notna(x) and str(x).strip() else None
+        )
+    
+    # Col 1: Drill-down by Parent (first word)
     with c_drill:
-        if 'temuan.nama.parent' in df_exploded_filtered.columns:
-            parent_options = ["Semua"] + sorted(df_exploded_filtered['temuan.nama.parent'].dropna().astype(str).unique())
+        if 'temuan_parent' in df_exploded_filtered.columns:
+            # Get unique parent categories (first words), exclude None/empty
+            parents = df_exploded_filtered['temuan_parent'].dropna().unique()
+            parents = [p for p in parents if p and p.strip()]
+            parent_options = ["Semua"] + sorted(set(parents))
             selected_parent = st.selectbox("Filter per Kategori (Parent):", parent_options)
             
     # Col 2: Limit
@@ -55,10 +67,11 @@ with tab1:
         st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
         breakdown_cat = st.checkbox("Rincian per Kategori (Treemap)?", value=False)
         
-    if 'temuan.nama' in df_exploded_filtered.columns:
-        # Filter data based on selection (Shared for both charts)
+    if 'temuan_nama_spesifik' in df_exploded_filtered.columns:
+        # Filter data based on parent selection
         if selected_parent != "Semua":
-            df_analysis = df_exploded_filtered[df_exploded_filtered['temuan.nama.parent'] == selected_parent]
+            # Show all items where first word matches selected parent
+            df_analysis = df_exploded_filtered[df_exploded_filtered['temuan_parent'] == selected_parent]
         else:
             df_analysis = df_exploded_filtered
 
@@ -68,16 +81,17 @@ with tab1:
             # --- 1. PARETO CHART (Left) ---
         with col_pareto:
             # Dynamic Column Selection:
-            # - If "All" selected -> Analyze Parent Categories (temuan.nama.parent)
-            # - If "Specific Parent" selected -> Analyze Objects (temuan.nama)
+            # - If "Semua" selected -> Analyze Parent Categories (first word)
+            # - If "Specific Parent" selected -> Analyze full temuan_nama_spesifik within that parent
             
-            col_analysis = 'temuan.nama' # Default
-            if selected_parent == "Semua" and 'temuan.nama.parent' in df_analysis.columns:
-                col_analysis = 'temuan.nama.parent'
-                chart_title = "<b>Kategori Isu Teratas</b><br><sup style='color:grey'>Mengidentifikasi jenis temuan yang menyebabkan mayoritas masalah (Prinsip 80/20).</sup>"
+            if selected_parent == "Semua":
+                # Show aggregated by parent (first word)
+                col_analysis = 'temuan_parent'
+                chart_title = "<b>Kategori Parent Teratas</b><br><sup style='color:grey'>Agregasi berdasarkan kata pertama temuan (Prinsip 80/20).</sup>"
             else:
-                col_analysis = 'temuan.nama'
-                chart_title = f"<b>Objek Teratas dalam '{selected_parent}'</b><br><sup style='color:grey'>Fokus pada objek yang paling sering muncul dalam kategori ini.</sup>"
+                # Show specific items within the selected parent
+                col_analysis = 'temuan_nama_spesifik'
+                chart_title = f"<b>Detail '{selected_parent.upper()}'</b><br><sup style='color:grey'>Semua temuan yang dimulai dengan '{selected_parent}'.</sup>"
 
             df_obj_pareto = df_analysis[col_analysis].value_counts().reset_index()
             df_obj_pareto.columns = ['Object', 'Count']
@@ -159,21 +173,36 @@ with tab1:
 
         # --- 2. TREEMAP CHART (Right) ---
         with col_treemap:
-            # Treemap Logic
-            if 'temuan.nama.parent' in df_analysis.columns:
-                target_cols = ['temuan.nama.parent', 'temuan.nama']
-                if breakdown_cat and 'temuan_kategori' in df_analysis.columns:
-                     target_cols.append('temuan_kategori')
+            # Treemap Logic with Parent-Child Hierarchy
+            if 'temuan_nama_spesifik' in df_analysis.columns and 'temuan_parent' in df_analysis.columns:
                 
-                path = [px.Constant("Semua Kategori")] + target_cols
-                df_obj_tree = df_analysis.groupby(target_cols).size().reset_index(name='Count')
-                
-                if max_items != "Semua":
-                   top_parents = df_obj_tree.groupby('temuan.nama.parent')['Count'].sum().nlargest(max_items).index
-                   df_obj_tree = df_obj_tree[df_obj_tree['temuan.nama.parent'].isin(top_parents)]
+                if selected_parent == "Semua":
+                    # Hierarchical view: Parent -> Child
+                    target_cols = ['temuan_parent', 'temuan_nama_spesifik']
+                    if breakdown_cat and 'temuan_kategori' in df_analysis.columns:
+                        target_cols.append('temuan_kategori')
+                    
+                    path = [px.Constant("Semua Kategori")] + target_cols
+                    df_obj_tree = df_analysis.groupby(target_cols).size().reset_index(name='Count')
+                    
+                    if max_items != "Semua":
+                        # Limit by top parents
+                        top_parents = df_obj_tree.groupby('temuan_parent')['Count'].sum().nlargest(max_items).index
+                        df_obj_tree = df_obj_tree[df_obj_tree['temuan_parent'].isin(top_parents)]
+                else:
+                    # Show only children within selected parent
+                    target_cols = ['temuan_nama_spesifik']
+                    if breakdown_cat and 'temuan_kategori' in df_analysis.columns:
+                        target_cols.append('temuan_kategori')
+                    
+                    path = [px.Constant(selected_parent.upper())] + target_cols
+                    df_obj_tree = df_analysis.groupby(target_cols).size().reset_index(name='Count')
+                    
+                    if max_items != "Semua":
+                        df_obj_tree = df_obj_tree.nlargest(max_items, 'Count')
             else:
                 path = ['Object']
-                df_obj_tree = df_analysis['temuan.nama'].value_counts().reset_index()
+                df_obj_tree = df_analysis['temuan_nama_spesifik'].value_counts().reset_index()
                 df_obj_tree.columns = ['Object', 'Count']
                 if max_items != "Semua":
                     df_obj_tree = df_obj_tree.head(max_items)
@@ -184,13 +213,19 @@ with tab1:
             else:
                  color_params = dict(color='Count', color_continuous_scale=custom_scale)
 
+            # Dynamic title based on selection
+            if selected_parent == "Semua":
+                tree_title = "<b>Hirarki Parent → Child</b><br><sup style='color:grey'>Kata pertama sebagai parent, detail temuan sebagai child.</sup>"
+            else:
+                tree_title = f"<b>Detail '{selected_parent.upper()}'</b><br><sup style='color:grey'>Semua temuan dalam kategori '{selected_parent}'.</sup>"
+            
             fig_tree = px.treemap(
                 df_obj_tree, 
                 path=path, 
                 values='Count', 
                 **color_params,
-                maxdepth=3 if breakdown_cat else 2, 
-                title="<b>Hirarki Objek</b><br><sup style='color:grey'>Visualisasi proporsi volume temuan. Blok lebih besar = Lebih banyak temuan.</sup>"
+                maxdepth=4 if breakdown_cat else 3, 
+                title=tree_title
             )
             
             # Styling
@@ -216,154 +251,212 @@ with tab1:
 # --- B. Condition Wordcloud (Split: Adjectives & Nouns) ---
 with tab2:
     # st.subheader("Condition Wordcloud")
-    st.caption("Visualizing most frequent words (Dummy Data: Adjectives vs Nouns)")
+    st.caption("Visualisasi kata yang paling sering muncul berdasarkan data temuan")
     
-    # Text Processing & Plotting Function (Reusable - Interactive & Compact)
-    def render_wordcloud_interactive(frequency_dict, color_cmap='Blues', title=""):
-        try:
-            # Generate Layout with compact settings
-            # We use a larger canvas to ensure high resolution positioning, 
-            # then map it to the plotly coordinates.
-            wc = WordCloud(width=600, height=400, background_color=None, mode="RGBA",
-                          prefer_horizontal=1.0, # All Horizontal for compactness
-                          relative_scaling=0.5,
-                          margin=2, 
-                          min_font_size=10, max_font_size=80, # Adjusted for Plotly scaling
-                          colormap=color_cmap 
-                          ).generate_from_frequencies(frequency_dict)
-            
-            # Extract coordinates for Plotly
-            word_list = []
-            freq_list = []
-            fontsize_list = []
-            position_x_list = []
-            position_y_list = []
-            colors_list = []
-            
-            import matplotlib.colors as mcolors
-            import matplotlib.cm as cm
-            
-            # Re-generate colors to match the cmap strictly
-            counts = list(frequency_dict.values())
-            if not counts: return go.Figure()
-            max_c = max(counts)
-            min_c = min(counts)
-            norm = mcolors.Normalize(vmin=min_c, vmax=max_c)
-            cmap = cm.get_cmap(color_cmap)
-
-            for item in wc.layout_:
-                if len(item) < 3: continue
-                # Unpack varying tuple lengths
-                if len(item) == 5:
-                    (word, fontsize, position, orientation, color) = item
-                elif len(item) == 6:
-                    (word, _, fontsize, position, orientation, color) = item
-                else: continue
+    # Interactive Wordcloud using wordcloud2.js (embedded HTML/JS)
+    def render_wordcloud_interactive(frequency_dict, color_scheme='blue', title=""):
+        """
+        Renders an interactive wordcloud using wordcloud2.js library.
+        Color schemes: 'blue', 'red', 'green', 'orange', 'purple'
+        """
+        import streamlit.components.v1 as components
+        import json
+        
+        if not frequency_dict:
+            st.info("Tidak ada data untuk wordcloud")
+            return
+        
+        # Color palettes
+        color_palettes = {
+            'blue': ['#0D47A1', '#1565C0', '#1976D2', '#1E88E5', '#42A5F5', '#64B5F6'],
+            'red': ['#B71C1C', '#C62828', '#D32F2F', '#E53935', '#EF5350', '#E57373'],
+            'green': ['#1B5E20', '#2E7D32', '#388E3C', '#43A047', '#66BB6A', '#81C784'],
+            'orange': ['#E65100', '#EF6C00', '#F57C00', '#FB8C00', '#FFA726', '#FFB74D'],
+            'purple': ['#4A148C', '#6A1B9A', '#7B1FA2', '#8E24AA', '#AB47BC', '#BA68C8']
+        }
+        colors = color_palettes.get(color_scheme, color_palettes['blue'])
+        
+        # Prepare word list for wordcloud2.js: [[word, weight], ...]
+        max_freq = max(frequency_dict.values())
+        word_list = [[word, int((freq / max_freq) * 100)] for word, freq in frequency_dict.items()]
+        word_list_json = json.dumps(word_list)
+        freq_dict_json = json.dumps(frequency_dict)
+        colors_json = json.dumps(colors)
+        
+        # Generate unique canvas ID
+        import hashlib
+        canvas_id = f"wordcloud_{hashlib.md5(str(frequency_dict).encode()).hexdigest()[:8]}"
+        
+        html_code = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
+            <style>
+                body {{
+                    margin: 0;
+                    padding: 0;
+                    overflow: hidden;
+                    background: transparent;
+                }}
+                #container {{
+                    position: relative;
+                    width: 100%;
+                    height: 350px;
+                }}
+                #{canvas_id} {{
+                    width: 100%;
+                    height: 100%;
+                }}
+                #tooltip {{
+                    position: absolute;
+                    background: rgba(0, 82, 106, 0.95);
+                    color: white;
+                    padding: 8px 14px;
+                    border-radius: 8px;
+                    font-family: 'Segoe UI', sans-serif;
+                    font-size: 13px;
+                    pointer-events: none;
+                    opacity: 0;
+                    transition: opacity 0.2s ease;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                    z-index: 1000;
+                }}
+                #tooltip.visible {{
+                    opacity: 1;
+                }}
+                #tooltip .word {{
+                    font-weight: 700;
+                    font-size: 15px;
+                }}
+                #tooltip .freq {{
+                    opacity: 0.9;
+                    margin-top: 2px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="container">
+                <canvas id="{canvas_id}"></canvas>
+                <div id="tooltip">
+                    <div class="word"></div>
+                    <div class="freq"></div>
+                </div>
+            </div>
+            <script>
+                const wordList = {word_list_json};
+                const freqDict = {freq_dict_json};
+                const colors = {colors_json};
+                const canvas = document.getElementById('{canvas_id}');
+                const tooltip = document.getElementById('tooltip');
+                const container = document.getElementById('container');
                 
-                if isinstance(word, tuple): word = word[0]
-                word = str(word).strip("('),")
+                // Resize canvas to container
+                function resizeCanvas() {{
+                    canvas.width = container.offsetWidth;
+                    canvas.height = container.offsetHeight;
+                }}
+                resizeCanvas();
                 
-                if position is None: continue
+                // Color function
+                function getColor(word, weight) {{
+                    const idx = Math.floor((weight / 100) * (colors.length - 1));
+                    return colors[Math.min(idx, colors.length - 1)];
+                }}
                 
-                freq = frequency_dict.get(word, 0)
+                // Wordcloud options
+                const options = {{
+                    list: wordList,
+                    gridSize: 8,
+                    weightFactor: function(size) {{
+                        return Math.pow(size, 1.2) * (canvas.width / 400);
+                    }},
+                    fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
+                    fontWeight: '600',
+                    color: getColor,
+                    backgroundColor: 'transparent',
+                    rotateRatio: 0.3,
+                    rotationSteps: 2,
+                    shuffle: true,
+                    drawOutOfBound: false,
+                    shrinkToFit: true,
+                    hover: function(item, dimension, event) {{
+                        if (item) {{
+                            const word = item[0];
+                            const freq = freqDict[word] || 0;
+                            tooltip.querySelector('.word').textContent = word;
+                            tooltip.querySelector('.freq').textContent = 'Frekuensi: ' + freq;
+                            tooltip.classList.add('visible');
+                            
+                            // Position tooltip
+                            const rect = container.getBoundingClientRect();
+                            let x = event.clientX - rect.left + 15;
+                            let y = event.clientY - rect.top - 10;
+                            
+                            // Keep tooltip in bounds
+                            if (x + 150 > container.offsetWidth) x = x - 170;
+                            if (y + 60 > container.offsetHeight) y = y - 50;
+                            
+                            tooltip.style.left = x + 'px';
+                            tooltip.style.top = y + 'px';
+                        }} else {{
+                            tooltip.classList.remove('visible');
+                        }}
+                    }},
+                    click: function(item) {{
+                        if (item) {{
+                            console.log('Clicked:', item[0]);
+                        }}
+                    }}
+                }};
                 
-                # Append data
-                word_list.append(word)
-                freq_list.append(freq)
-                fontsize_list.append(fontsize) # Plotly matches this reasonably well
-                position_x_list.append(position[1])
-                position_y_list.append(400 - position[0]) # Flip Y-axis
+                // Render wordcloud
+                WordCloud(canvas, options);
                 
-                # Manually map color to ensure consistency with cmap
-                colors_list.append(mcolors.to_hex(cmap(0.4 + (norm(freq) * 0.6))))
+                // Hide tooltip when mouse leaves
+                container.addEventListener('mouseleave', function() {{
+                    tooltip.classList.remove('visible');
+                }});
+            </script>
+        </body>
+        </html>
+        """
+        
+        components.html(html_code, height=370)
 
-            # Plotly Scatter
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=position_x_list, y=position_y_list,
-                text=word_list,
-                mode='text',
-                textfont=dict(size=fontsize_list, family="Source Sans Pro, sans-serif", color=colors_list),
-                hoverinfo='text',
-                hovertext=[f"{w}: {f}" for w, f in zip(word_list, freq_list)]
-            ))
-
-            # Add Colorbar Legend
-            fig.add_trace(go.Scatter(
-                x=[None], y=[None],
-                mode='markers',
-                marker=dict(
-                    colorscale=color_cmap, 
-                    showscale=True,
-                    cmin=min_c, cmax=max_c,
-                    color=[min_c, max_c],
-                    colorbar=dict(
-                        title="Frequency",
-                        titleside="right",
-                        thickness=15,
-                        len=0.7,
-                        titlefont=dict(color="#00526A", size=12),
-                        tickfont=dict(color="#00526A", size=10)
-                    )
-                ),
-                hoverinfo='none',
-                showlegend=False
-            ))
-            
-            fig.update_layout(
-                xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 600]),
-                yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, 400]),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                showlegend=False,
-                height=400,
-                margin=dict(t=10, b=10, l=10, r=10)
-            )
-            return fig
-
-        except Exception as e:
-            st.error(f"Gagal membuat wordcloud: {e}")
-            return go.Figure()
-
-    # --- Dummy Data ---
-    kata_sifat_data = {
-        'Rusak': 120, 'Bocor': 90, 'Putus': 85, 'Kotor': 70, 
-        'Retak': 65, 'Panas': 60, 'Licin': 55, 'Longgar': 50,
-        'Korosif': 45, 'Hilang': 40, 'Miring': 35, 'Aus': 30,
-        'Terbuka': 25, 'Pecah': 20, 'Tersumbat': 15
-    }
+    # --- Real Data from DataFrame ---
+    # Kata Sifat (Conditions) from temuan_kondisi column
+    kata_sifat_data = {}
+    if 'temuan_kondisi' in df_exploded_filtered.columns:
+        kondisi_series = df_exploded_filtered['temuan_kondisi'].dropna().astype(str)
+        kondisi_series = kondisi_series[kondisi_series.str.strip() != '']
+        kata_sifat_data = kondisi_series.value_counts().head(20).to_dict()
     
-    kata_benda_data = {
-        'Kabel': 150, 'Pipa': 110, 'Valve': 95, 'Trafo': 80,
-        'Motor': 75, 'Pompa': 70, 'Panel': 65, 'Tangga': 60,
-        'Lampu': 55, 'Sensor': 50, 'Baut': 45, 'Oli': 40,
-        'Helm': 35, 'Sepatu': 30, 'Sarung Tangan': 25
-    }
+    # Kata Benda (Objects) from temuan_nama_spesifik_spesifik column
+    kata_benda_data = {}
+    if 'temuan_nama_spesifik' in df_exploded_filtered.columns:
+        nama_series = df_exploded_filtered['temuan_nama_spesifik'].dropna().astype(str)
+        nama_series = nama_series[nama_series.str.strip() != '']
+        kata_benda_data = nama_series.value_counts().head(20).to_dict()
     
     # --- Layout ---
     wc_col1, wc_col2 = st.columns(2)
     
     with wc_col1:
-        # st.markdown("##### Kata Sifat (Adjectives)")
-        fig_sifat = render_wordcloud_interactive(kata_sifat_data, 'Reds')
-        
-        # Add Title & Description (Consistent with Tab 1)
-        fig_sifat.update_layout(
-            title="<b>Kata Sifat (Adjectives)</b><br><sup style='color:grey'>Kata deskriptif yang paling sering muncul yang menunjukkan sifat temuan.</sup>",
-            margin=dict(t=80, l=10, r=10, b=10)
-        )
-        st.plotly_chart(fig_sifat, use_container_width=True)
+        st.markdown("**Kondisi Temuan**")
+        st.caption("Kondisi yang paling sering dilaporkan dalam temuan.")
+        if kata_sifat_data:
+            render_wordcloud_interactive(kata_sifat_data, 'red')
+        else:
+            st.info("Tidak ada data kondisi temuan")
         
     with wc_col2:
-        # st.markdown("##### Kata Benda (Nouns)")
-        fig_benda = render_wordcloud_interactive(kata_benda_data, 'Blues')
-        
-        # Add Title & Description
-        fig_benda.update_layout(
-             title="<b>Kata Benda (Nouns)</b><br><sup style='color:grey'>Objek atau komponen umum yang disebutkan dalam temuan.</sup>",
-             margin=dict(t=80, l=10, r=10, b=10)
-        )
-        st.plotly_chart(fig_benda, use_container_width=True)
+        st.markdown("**Objek Temuan**")
+        st.caption("Objek atau komponen spesifik yang paling sering ditemukan.")
+        if kata_benda_data:
+            render_wordcloud_interactive(kata_benda_data, 'blue')
+        else:
+            st.info("Tidak ada data objek temuan")
 
 # --- OLD WORDCLOUD CODE FROZEN BELOW ---
 # """
@@ -380,10 +473,10 @@ with tab3:
 
     if not df_exploded_filtered.empty:
         # --- Prepare Nodes & Links for Sankey ---
-        # Flow: temuan_kategori -> temuan.nama.parent -> nama_lokasi
+        # Flow: temuan_kategori -> temuan_nama_spesifik -> nama_lokasi
         
-        has_parent = 'temuan.nama.parent' in df_exploded_filtered.columns
-        cols = ['temuan_kategori', 'temuan.nama.parent', 'nama_lokasi'] if has_parent else ['temuan_kategori', 'temuan.nama', 'nama_lokasi']
+        has_parent = 'temuan_nama_spesifik' in df_exploded_filtered.columns
+        cols = ['temuan_kategori', 'temuan_nama_spesifik', 'nama_lokasi'] if has_parent else ['temuan_kategori', 'temuan_nama_spesifik', 'nama_lokasi']
         cols = [c for c in cols if c in df_exploded_filtered.columns]
         
         # Limit Control

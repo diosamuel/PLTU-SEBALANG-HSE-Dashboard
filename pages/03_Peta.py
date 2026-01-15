@@ -41,15 +41,15 @@ with col_map:
                 
                 # --- CATEGORY-MATCHED HEATMAP ---
                 # Gradient mapping: 0.2 (Positive), 0.4 (Action), 0.6 (Condition), 1.0 (Near Miss)
-                custom_gradient = {
-                    0.2: HSE_COLOR_MAP['Positive'],         # #1B5E20
-                    0.4: HSE_COLOR_MAP['Unsafe Action'],    # #B71C1C
-                    0.6: HSE_COLOR_MAP['Unsafe Condition'], # #F57F17
-                    1.0: HSE_COLOR_MAP['Near Miss']         # #1A237E
-                }
+                # custom_gradient = {
+                #     0.2: HSE_COLOR_MAP['Positive'],         # #1B5E20
+                #     0.4: HSE_COLOR_MAP['Unsafe Action'],    # #B71C1C
+                #     0.6: HSE_COLOR_MAP['Unsafe Condition'], # #F57F17
+                #     1.0: HSE_COLOR_MAP['Near Miss']         # #1A237E
+                # }
                 
                 heat_data = [[row['lat'], row['lon']] for index, row in df_geo.iterrows()]
-                HeatMap(heat_data, radius=18, blur=12, gradient=custom_gradient, name='Peta Panas Risiko').add_to(m)
+                HeatMap(heat_data, radius=18, blur=12, name='Heatmap Temuan').add_to(m)
                 
                 # Marker Cluster for clickability
                 marker_cluster = MarkerCluster(name='Semua Temuan').add_to(m)
@@ -73,11 +73,9 @@ with col_map:
                     popup_html = f"""
                     <div style="font-family: 'Source Sans Pro', sans-serif; color: #00526A; min-width: 200px;">
                         <b style="font-size: 14px;">{kategori}</b><hr style="margin: 5px 0;">
-                        <b>Status:</b> {status}<br>
-                        <b>Temuan Nama Parent:</b> {parent}<br>
-                        <b>Temuan Nama Child:</b> {child}<br>
-                        <b>Temuan Kondisi:</b> {kondisi}<br>
-                        <b>Temuan Location:</b> {location}
+                        <b>Status :</b> {status}<br>
+                        <b>Kondisi:</b> {kondisi}<br>
+                        <b>Lokasi :</b> {location}
                     </div>
                     """
                     
@@ -124,5 +122,5 @@ with col_map:
 with col_details:
     st.markdown("### Lokasi Temuan Teratas")
     if 'nama_lokasi' in df_master_filtered.columns:
-        top_locs = df_master_filtered.groupby('nama_lokasi')['kode_temuan'].nunique().sort_values(ascending=False).head(20).reset_index(name='Count of Findings')
+        top_locs = df_master_filtered.groupby('nama_lokasi')['kode_temuan'].nunique().sort_values(ascending=False).head(20).reset_index(name='Total')
         st.dataframe(top_locs, hide_index=True, use_container_width=True)

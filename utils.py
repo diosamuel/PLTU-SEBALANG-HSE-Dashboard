@@ -22,12 +22,13 @@ def get_db_engine():
         # Check if secrets exist, otherwise try environment variables or fail gracefully
         if "postgres" in st.secrets:
             db_config = st.secrets["postgres"]
+            # db_url = "postgresql://postgres.bdxkbsrnhkfjlfnxeixl:akuharusbisa@aws-1-ap-south-1.pooler.supabase.com:6543/postgres"
             db_url = f"postgresql+psycopg2://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['dbname']}"
         else:
             # Fallback for manual testing if secrets aren't set up yet
             # Using credentials provided in migration plan
-            db_url = "postgresql+psycopg2://postgres.hmdbqxhdvebwheyucmvo:bkQXObqSKo4dUtwr@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
             
+            db_url = "postgresql://postgres.bdxkbsrnhkfjlfnxeixl:akuharusbisa@aws-1-ap-south-1.pooler.supabase.com:6543/postgres"
         engine = create_engine(db_url)
         return engine
     except Exception as e:
@@ -45,62 +46,137 @@ def load_data():
         if not engine:
             return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
         
-        # --- SQL QUERY: Star Schema Reconstruction ---
-        # 1. Reconstructs timestamps using MAKE_TIMESTAMP
-        # 2. Calculates SLA dynamically (Create Date + 7 Days)
-        # 3. Renames 'long' -> 'lon' for Map compatibility
+        # --- SQL QUERY: Star Schema Denormalization ---
+        # Fully denormalized query joining all dimension tables from DDL
         query = """
         SELECT 
+            -- Fact Table Keys
             f.kode_temuan,
             
-            -- 1. Reconstruct Create Date (Handle potential NULLs safely)
+            -- ============================================
+            -- 1. DATE DIMENSIONS (Reconstructed Timestamps)
+            -- ============================================
+            
+            -- Create Date (tanggal pembuatan)
             CASE WHEN dd_create."year" IS NOT NULL 
                  THEN MAKE_TIMESTAMP(dd_create."year", dd_create."month", dd_create."day", dd_create.hours, dd_create.minutes, 0.0)
                  ELSE NULL 
             END AS tanggal,
-
-            -- 2. Calculate SLA (+7 Days logic)
+            dd_create.day_name AS create_day_name,
+            
+            -- SLA Deadline (+7 Days from Create Date)
             CASE WHEN dd_create."year" IS NOT NULL 
                  THEN (MAKE_TIMESTAMP(dd_create."year", dd_create."month", dd_create."day", dd_create.hours, dd_create.minutes, 0.0) + INTERVAL '7 days')
                  ELSE NULL 
             END AS deadline_sla,
             
-            -- 3. Reconstruct Close Date (NULL if ticket is Open)
+            -- Close Date (tanggal penutupan)
             CASE WHEN dd_close."year" IS NOT NULL 
                  THEN MAKE_TIMESTAMP(dd_close."year", dd_close."month", dd_close."day", dd_close.hours, dd_close.minutes, 0.0)
                  ELSE NULL 
             END AS close_at,
+            dd_close.day_name AS close_day_name,
+            
+            -- Open Date (tanggal dibuka)
+            CASE WHEN dd_open."year" IS NOT NULL 
+                 THEN MAKE_TIMESTAMP(dd_open."year", dd_open."month", dd_open."day", dd_open.hours, dd_open.minutes, 0.0)
+                 ELSE NULL 
+            END AS open_at,
+            dd_open.day_name AS open_day_name,
+            
+            -- Update Date (tanggal update terakhir)
+            CASE WHEN dd_update."year" IS NOT NULL 
+                 THEN MAKE_TIMESTAMP(dd_update."year", dd_update."month", dd_update."day", dd_update.hours, dd_update.minutes, 0.0)
+                 ELSE NULL 
+            END AS update_at,
+            dd_update.day_name AS update_day_name,
+            
+            -- Target Date (tanggal target penyelesaian)
+            CASE WHEN dd_target."year" IS NOT NULL 
+                 THEN MAKE_TIMESTAMP(dd_target."year", dd_target."month", dd_target."day", dd_target.hours, dd_target.minutes, 0.0)
+                 ELSE NULL 
+            END AS target_at,
+            dd_target.day_name AS target_day_name,
 
-            -- 4. Personnel Info
+            -- ============================================
+            -- 2. CREATOR DIMENSION (Pelapor)
+            -- ============================================
+            dc.creator_id,
             dc.creator_name,
-            dc.creator_nid,
-            dc.role,
-            dc.departemen AS team_role,
-            dp.pic_name AS nama_pic,
-            dp.pic_nama_departemen AS nama_departement_pic,
+            dc.creator_kode_jabatan,
+            dc.nama_perusahaan AS creator_perusahaan,
+            dc.creator_departemen_dan_role,
+            dc.creator_role,
+            dc.creator_departemen,
 
-            -- 5. Finding Details
+            -- ============================================
+            -- 3. PIC DIMENSION (Person In Charge)
+            -- ============================================
+            dp.pic_sk,
+            dp.pic_id,
+            dp.pic_name,
+            dp.pic_departemen,
+
+            -- ============================================
+            -- 4. TEMUAN DIMENSION (Finding Details)
+            -- ============================================
+            dt.raw_judul,
+            dt.raw_kondisi,
+            dt.raw_rekomendasi,
+            dt.temuan_nama,
+            dt.temuan_kondisi,
+            dt.temuan_rekomendasi,
             dt.temuan_kategori,
             dt.temuan_status,
-            dt.temuan_kondisi, 
-            dt.temuan_kondisi AS "temuan.kondisi.lemma", -- Alias for Wordcloud
-            dt.temuan_nama,     
-            dt.temuan_nama AS "temuan.nama", -- Alias for backward compatibility
-            dt.temuan_rekomendasi,
+            dt.temuan_nama_spesifik,
+            dt.note AS temuan_note,
+            dt.keterangan_lokasi,
             
-            -- 6. Geospatial (Rename 'long' to 'lon')
+            -- ============================================
+            -- 5. TEMPAT/LOKASI DIMENSION (Geospatial)
+            -- ============================================
             loc.nama_lokasi,
             loc.lat,
             loc.long AS lon,
-            loc.zona
+            loc.zone AS zona
 
         FROM public.fact_k3 f
-        LEFT JOIN public.dim_temuan dt ON CAST(f.kode_temuan AS VARCHAR) = CAST(dt.kode_temuan AS VARCHAR)
-        LEFT JOIN public.dim_creator dc ON CAST(f.creator_nid AS VARCHAR) = CAST(dc.creator_nid AS VARCHAR)
-        LEFT JOIN public.dim_pic_id dp ON CAST(f.pic_id AS VARCHAR) = CAST(dp.pic_sk AS VARCHAR)
-        LEFT JOIN public.dim_tempat_id loc ON CAST(f.tempat_id AS VARCHAR) = CAST(loc.nama_lokasi AS VARCHAR)
-        LEFT JOIN public.dim_create_date_id dd_create ON CAST(f.create_id AS VARCHAR) = CAST(dd_create.create_date_sk AS VARCHAR)
-        LEFT JOIN public.dim_close_date_id dd_close ON CAST(f.close_id AS VARCHAR) = CAST(dd_close.close_date_sk AS VARCHAR)
+        
+        -- Temuan Dimension
+        LEFT JOIN public.dim_temuan dt 
+            ON f.kode_temuan = dt.kode_temuan
+        
+        -- Creator Dimension
+        LEFT JOIN public.dim_creator dc 
+            ON f.creator_id = dc.creator_id
+        
+        -- PIC Dimension
+        LEFT JOIN public.dim_pic dp 
+            ON f.pic_sk = dp.pic_sk
+        
+        -- Tempat/Lokasi Dimension
+        LEFT JOIN public.dim_tempat loc 
+            ON UPPER(f.tempat_id) = UPPER(loc.nama_lokasi)
+        
+        -- Create Date Dimension
+        LEFT JOIN public.dim_create_date dd_create 
+            ON f.create_date_sk = dd_create.create_date_sk
+        
+        -- Close Date Dimension
+        LEFT JOIN public.dim_close_date dd_close 
+            ON f.close_date_sk = dd_close.close_date_sk
+        
+        -- Open Date Dimension
+        LEFT JOIN public.dim_open_date dd_open 
+            ON f.open_date_sk = dd_open.open_date_sk
+        
+        -- Update Date Dimension
+        LEFT JOIN public.dim_update_date dd_update 
+            ON f.update_date_sk = dd_update.update_date_sk
+        
+        -- Target Date Dimension
+        LEFT JOIN public.dim_target_date dd_target 
+            ON f.target_date_sk = dd_target.target_date_sk
         """
         
         with engine.connect() as conn:
@@ -108,35 +184,32 @@ def load_data():
 
         # --- PYTHON POST-PROCESSING ---
         
-        # 1. Enforce Datetime Types
-        df_master['tanggal'] = pd.to_datetime(df_master['tanggal'], errors='coerce')
-        df_master['deadline_sla'] = pd.to_datetime(df_master['deadline_sla'], errors='coerce')
+        # 1. Enforce Datetime Types for all date columns
+        date_columns = ['tanggal', 'deadline_sla', 'close_at', 'open_at', 'update_at', 'target_at']
+        for col in date_columns:
+            if col in df_master.columns:
+                df_master[col] = pd.to_datetime(df_master[col], errors='coerce')
         
-        # 2. String Cleaning (Strip whitespace)
-        cols_to_strip = ['temuan_status', 'temuan_kategori', 'temuan.nama']
+        # 2. String Cleaning (Strip whitespace for key columns)
+        cols_to_strip = [
+            'temuan_status', 'temuan_kategori', 'temuan_nama', 'temuan_nama_spesifik',
+            'temuan_kondisi', 'temuan_rekomendasi', 'creator_name', 'creator_departemen',
+            'pic_name', 'pic_departemen', 'nama_lokasi', 'zona'
+        ]
         for col in cols_to_strip:
             if col in df_master.columns:
                 df_master[col] = df_master[col].astype(str).str.strip()
+                # Replace 'None' and 'nan' strings with actual NaN
+                df_master[col] = df_master[col].replace(['None', 'nan', 'NaN', ''], pd.NA)
         
         # 3. Global Filter (Exclude P2K3)
-        if 'temuan.nama' in df_master.columns:
-            df_master = df_master[~df_master['temuan.nama'].str.lower().str.contains('p2k3', na=False)]
+        if 'temuan_nama' in df_master.columns:
+            df_master = df_master[~df_master['temuan_nama'].astype(str).str.lower().str.contains('p2k3', na=False)]
 
-        # 4. Explode Logic (Crucial for Pareto Charts)
-        # The DB has 1 row per finding. If temuan_nama = "Helmet, Shoes", we split it into 2 rows.
+        # 4. Create exploded dataframe (for multi-value analysis)
         df_exploded = df_master.copy()
-        
-        if df_exploded['temuan.nama'].str.contains(',').any():
-            df_exploded['temuan.nama'] = df_exploded['temuan.nama'].str.split(',')
-            df_exploded = df_exploded.explode('temuan.nama')
-            df_exploded['temuan.nama'] = df_exploded['temuan.nama'].str.strip()
-            
-        # 5. Recreate 'Parent' Category (Heuristic: First word of object name)
-        df_exploded['temuan.nama.parent'] = df_exploded['temuan.nama'].apply(
-            lambda x: str(x).split()[0] if x else None
-        )
 
-        # 6. Extract Map Data
+        # 5. Extract Map Data (unique locations with coordinates)
         df_map = df_master[['nama_lokasi', 'lat', 'lon']].drop_duplicates().dropna()
 
         return df_exploded, df_master, df_map
@@ -159,8 +232,8 @@ def load_css():
     .block-container {
         padding-top: 1rem !important; /* Reduce top padding drastically */
         padding-bottom: 1rem !important;
-        padding-left: 2rem !important; 
-        padding-right: 2rem !important;
+        padding-left: 1rem !important; 
+        padding-right: 1rem !important;
         max-width: 100% !important;
     }
     
@@ -201,9 +274,9 @@ def load_css():
         backdrop-filter: blur(10px); /* Frosted Glass Effect */
         margin-bottom: 5px;
     }
-    .metric-card h3 { font-size: 0.9rem !important; margin: 0 !important; opacity: 0.8; line-height: 1.1; }
-    .metric-card h2 { font-size: 1.4rem !important; margin: 0 !important; font-weight: 700; line-height: 1.1; }
-    .metric-card p { font-size: 0.7rem !important; margin: 0 !important; opacity: 0.7; line-height: 1.1; }
+    .metric-card h3 { font-size: 0.9rem !important; margin: 0 !important; opacity: 0.8;  }
+    .metric-card h1 { font-size: 2rem !important; margin: 0 !important; font-weight: 700;  }
+    .metric-card p { font-size: 0.7rem !important; margin: 0 !important; opacity: 0.7;  }
     
     /* Chart Containers */
     .plot-container {
@@ -347,12 +420,8 @@ def render_sidebar(df_master, df_exploded):
     load_css()
     
     # Reverted to Wikimedia Logo as requested
-    st.sidebar.image("https://kehatitenayan.web.id/static/media/PLN-NP.a8c9cf3c76844681aca8.png", width=200)
-    
-    # DB Status Indicator
-    st.sidebar.success("✅ Terhubung: Supabase")
-        
-    st.sidebar.title("Filter HSE")
+    st.sidebar.image("https://kehatitenayan.web.id/static/media/PLN-NP.a8c9cf3c76844681aca8.png", width=200)        
+    st.sidebar.title("Filter")
 
     # Date Filter
     if not df_master.empty and 'tanggal' in df_master.columns:
@@ -376,7 +445,7 @@ def render_sidebar(df_master, df_exploded):
         max_value=max_date
     )
 
-    granularity = st.sidebar.radio("Periode (Granularity)", ["Monthly", "Weekly"], horizontal=True)
+    granularity = st.sidebar.radio("Periode", ["Bulanan", "Mingguan"], horizontal=True)
 
     start_date, end_date = date_range if len(date_range) == 2 else (min_date, max_date)
 
@@ -406,14 +475,14 @@ def render_sidebar(df_master, df_exploded):
         if sel_locs and 'All' not in sel_locs:
             df_master_filtered = df_master_filtered[df_master_filtered['nama_lokasi'].isin(sel_locs)]
 
-    # Existing Role Filter (Combined with above logic flow)
-    if 'team_role' in df_master.columns:
+    # Existing Department Filter (Combined with above logic flow)
+    if 'creator_departemen' in df_master.columns:
         # Use filtered values or original? Usually dependent filters are better.
-        roles = ['All'] + sorted(df_master_filtered['team_role'].astype(str).unique().tolist())
+        depts = ['All'] + sorted(df_master_filtered['creator_departemen'].dropna().astype(str).unique().tolist())
         # Use index=0 (All)
-        selected_role = st.sidebar.selectbox("Department", roles)
-        if selected_role != 'All':
-            df_master_filtered = df_master_filtered[df_master_filtered['team_role'] == selected_role]
+        selected_dept = st.sidebar.selectbox("Department", depts)
+        if selected_dept != 'All':
+            df_master_filtered = df_master_filtered[df_master_filtered['creator_departemen'] == selected_dept]
 
     # Sync Exploded DF with filtered Master IDs
     if not df_master_filtered.empty:

@@ -10,7 +10,7 @@ from folium.plugins import HeatMap
 
 # --- 1. Page Configuration ---
 st.set_page_config(
-    page_title="Ringkasan Eksekutif HSSE",
+    page_title="DASHBOARD ANALISIS IZAT PLN NP UP SEBALANG",
     page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded"
@@ -33,7 +33,7 @@ from utils import render_sidebar, set_header_title
 df_master_filtered, df_exploded_filtered, granularity = render_sidebar(df_master, df_exploded)
 
 # --- 5. Header & Global Alerts ---
-set_header_title("Ringkasan Eksekutif HSSE")
+set_header_title("DASHBOARD ANALISIS IZAT PLN NP UP SEBALANG")
 
 
 # Global Alert for Open Near Miss
@@ -55,12 +55,13 @@ if 'temuan_status' in df_master_filtered.columns:
     status_lower = df_master_filtered['temuan_status'].astype(str).str.lower()
     closed_findings = status_lower[status_lower == 'closed'].shape[0]
     open_findings = status_lower[status_lower == 'open'].shape[0]
+    butuh_verifikasi = status_lower[status_lower == 'butuh verifikasi'].shape[0]
 else:
     closed_findings = 0
     open_findings = 0
-
+    butuh_verifikasi = 0
 if total_findings > 0:
-    closing_rate = (closed_findings / total_findings) * 100
+    closing_rate = ((closed_findings+butuh_verifikasi) / total_findings) * 100
 else:
     closing_rate = 0.0
 
@@ -69,41 +70,41 @@ pending_near_miss = df_master_filtered[
     (df_master_filtered['temuan_status'] == 'Open')
 ].shape[0]
 
+# st.write(df_master)
 c1, c2, c3, c4 = st.columns(4)
 
 with c1:
     st.markdown(f"""
     <div class="metric-card">
         <h3>Total Temuan</h3>
-        <h2>{total_findings}</h2>
-        <p style="color:grey; font-size:0.8rem;">Jumlah unik 'kode_temuan'.</p>
+        <h1>{total_findings}</h1>
+         <!--<p style="color:grey; font-size:0.8rem;">Jumlah unik 'kode_temuan'.</p>
     </div>
     """, unsafe_allow_html=True)
 
 with c2:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Open / Closed</h3>
-        <h2>{open_findings} / {closed_findings}</h2>
-        <p style="color:grey; font-size:0.8rem;">Temuan Aktif vs Selesai.</p>
+        <h3>Open / Closed / Butuh Verifikasi</h3>
+        <h1>{open_findings} <span style="opacity:0.2">/</span> {closed_findings} <span style="opacity:0.2">/</span> {butuh_verifikasi}</h1>
     </div>
     """, unsafe_allow_html=True)
 
 with c3:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Laju Penyelesaian</h3>
-        <h2>{closing_rate:.1f}%</h2>
-        <p style="color:grey; font-size:0.8rem;">(Selesai / Total) * 100.</p>
+        <h3>Closing Rate</h3>
+        <h1>{closing_rate:.1f}%</h1>
+        <!--<p style="color:grey; font-size:0.8rem;">(Selesai / Total) * 100.</p>-->
     </div>
     """, unsafe_allow_html=True)
 
 with c4:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Pending Near Miss</h3>
-        <h2 style="color: #FF4B4B;">{pending_near_miss}</h2>
-        <p style="color:grey; font-size:0.8rem;">Temuan 'Near Miss' Open</p>
+        <h3>Temuan Near Miss</h3>
+        <h1 style="color: #FF4B4B;">{pending_near_miss}</h1>
+        <!--<p style="color:grey; font-size:0.8rem;">Temuan 'Near Miss' Open</p>-->
     </div>
     """, unsafe_allow_html=True)
 
@@ -115,13 +116,13 @@ col_left, col_right = st.columns([2, 1])
 with col_left:
     with st.container():
         st.subheader(f"Tren Temuan ({granularity})")
-        st.caption("Visualisasi volume temuan dari waktu ke waktu untuk mengidentifikasi tren atau lonjakan.")
+        st.caption("Visualisasi temuan dari waktu ke waktu untuk mengidentifikasi tren atau lonjakan.")
         
         # Breakdown Switch
         trend_mode = st.radio("Mode Tampilan:", ["Tren Total", "Rincian per Kategori"], horizontal=True, label_visibility="collapsed")
         
         # Determine frequency and label based on granularity
-        if granularity == 'Weekly':
+        if granularity == 'Mingguan':
             resample_freq = 'W'
             period_freq = 'W'
             time_label = 'Minggu'
@@ -135,11 +136,11 @@ with col_left:
                 df_trend = df_master_filtered.set_index('tanggal').resample(resample_freq)['kode_temuan'].nunique().reset_index()
                 fig_trend = px.line(df_trend, x='tanggal', y='kode_temuan', markers=True, 
                                     color_discrete_sequence=['black'],
-                                    title=f"<b>Tren Temuan (Total)</b><br><sup style='color:#00526A'>Jumlah unik 'kode_temuan' per {time_label}</sup>")
+                                    title=f"<b>Tren Temuan ({time_label})</b>")
                 
                 # Force show all x-axis labels
-                if granularity == 'Weekly':
-                     fig_trend.update_xaxes(dtick="604800000.0", tickformat="%d %b") # Weekly in ms
+                if granularity == 'Mingguan':
+                     fig_trend.update_xaxes(dtick="604800000.0", tickformat="%d %b") # Mingguan in ms
                 else: 
                      fig_trend.update_xaxes(dtick="M1", tickformat="%b %Y")
             else:
@@ -159,7 +160,7 @@ with col_left:
                                         title=f"<b>Tren Temuan (Rincian)</b><br><sup style='color:#00526A'>Jumlah per Kategori per {time_label}</sup>")
                     
                     # Force show all x-axis labels
-                    if granularity == 'Weekly':
+                    if granularity == 'Mingguan':
                          fig_trend.update_xaxes(dtick="604800000.0", tickformat="%d %b")
                     else:
                          fig_trend.update_xaxes(dtick="M1", tickformat="%b %Y")
@@ -182,14 +183,19 @@ with col_right:
         st.subheader("Distribusi Risiko")
         st.caption("Rincian temuan berdasarkan Kategori Risiko.")
         if 'temuan_kategori' in df_master_filtered.columns:
-            df_risk = df_master_filtered['temuan_kategori'].value_counts().reset_index()
+            # Filter out None, NaN, and empty values
+            kategori_clean = df_master_filtered['temuan_kategori'].dropna()
+            kategori_clean = kategori_clean[kategori_clean.astype(str).str.strip() != '']
+            kategori_clean = kategori_clean[kategori_clean.astype(str).str.lower() != 'none']
+            
+            df_risk = kategori_clean.value_counts().reset_index()
             df_risk.columns = ['Category', 'Count']
             
             # Define colors
             
             fig_pie = px.pie(df_risk, values='Count', names='Category', 
                             color='Category', color_discrete_map=HSE_COLOR_MAP, hole=0.4,
-                            title="<b>Distribusi Risiko</b><br><sup style='color:#00526A'>Proporsi 'temuan_kategori'</sup>")
+                            title=" ")
             fig_pie.update_traces(textinfo='percent+value', texttemplate='%{value}<br>(%{percent})')
             fig_pie.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                   font=dict(color="#00526A"), 
@@ -200,21 +206,21 @@ with col_right:
 
 # --- 8. Charts (Row 2: Top Issues) ---
 # --- 8. Charts (Row 2: Top Issues) ---
-if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exploded_filtered.columns:
+if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' in df_exploded_filtered.columns:
     
     col_bar, col_line = st.columns([1, 1])
     
     with col_bar:
-        st.subheader("Isu Berulang Teratas (Objek)")
+        st.subheader("Temuan Berulang Teratas (Objek)")
         st.caption("Mengidentifikasi objek yang paling sering dilaporkan.")
         
     with col_line:
-        st.subheader("Tren Isu Berulang")
+        st.subheader("Tren Temuan Berulang")
         st.caption("Tren volume objek tertentu dari waktu ke waktu.")
 
     with col_bar:
         # Group by Object AND Category to show category context
-            top_objects = df_exploded_filtered.groupby(['temuan.nama', 'temuan_kategori']).size().reset_index(name='Count')
+            top_objects = df_exploded_filtered.groupby(['temuan_nama_spesifik', 'temuan_kategori']).size().reset_index(name='Count')
             top_objects.columns = ['Object', 'Category', 'Count']
             
             # Calculate TOTAL counts per Object for Sorting and Top 10 logic
@@ -361,30 +367,30 @@ if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exp
         # Filter Data based on Selection
         if 'tanggal' in df_exploded_filtered.columns:
             if selected_trend_objects:
-                df_trend_filtered = df_exploded_filtered[df_exploded_filtered['temuan.nama'].isin(selected_trend_objects)].copy()
+                df_trend_filtered = df_exploded_filtered[df_exploded_filtered['temuan_nama_spesifik'].isin(selected_trend_objects)].copy()
             else:
                 df_trend_filtered = pd.DataFrame() # Empty if nothing selected
             
             if not df_trend_filtered.empty:
                 # Determine frequency based on granularity
                 # Re-evaluating here in case scope is separate
-                freq_alias = 'W' if granularity == 'Weekly' else 'M'
+                freq_alias = 'W' if granularity == 'Mingguan' else 'M'
                 
                 # Resample by Period (Month or Day) and Object
                 df_trend_filtered['Period'] = pd.to_datetime(df_trend_filtered['tanggal']).dt.to_period(freq_alias).dt.to_timestamp()
                 
                 if trend_view_mode == "Rincian Kategori":
                     # Merge category info for legend
-                    df_obj_cat = df_exploded_filtered[['temuan.nama', 'temuan_kategori']].drop_duplicates(subset=['temuan.nama'])
-                    df_trend_filtered = df_trend_filtered.merge(df_obj_cat, on='temuan.nama', suffixes=('', '_y'))
+                    df_obj_cat = df_exploded_filtered[['temuan_nama_spesifik', 'temuan_kategori']].drop_duplicates(subset=['temuan_nama_spesifik'])
+                    df_trend_filtered = df_trend_filtered.merge(df_obj_cat, on='temuan_nama_spesifik', suffixes=('', '_y'))
                     
-                    df_line_data = df_trend_filtered.groupby(['Period', 'temuan.nama', 'temuan_kategori']).size().reset_index(name='Count')
-                    df_line_data['LegendLabel'] = df_line_data['temuan.nama'] + " (" + df_line_data['temuan_kategori'] + ")"
+                    df_line_data = df_trend_filtered.groupby(['Period', 'temuan_nama_spesifik', 'temuan_kategori']).size().reset_index(name='Count')
+                    df_line_data['LegendLabel'] = df_line_data['temuan_nama_spesifik'] + " (" + df_line_data['temuan_kategori'] + ")"
                     color_col = 'LegendLabel'
                 else:
                     # Total Trend View
-                    df_line_data = df_trend_filtered.groupby(['Period', 'temuan.nama']).size().reset_index(name='Count')
-                    color_col = 'temuan.nama'
+                    df_line_data = df_trend_filtered.groupby(['Period', 'temuan_nama_spesifik']).size().reset_index(name='Count')
+                    color_col = 'temuan_nama_spesifik'
                 
                 # Use qualitative colors or custom if needed
                 fig_line_top = px.line(df_line_data, x='Period', y='Count', color=color_col, markers=True,
@@ -406,7 +412,7 @@ if 'temuan.nama' in df_exploded_filtered.columns and 'temuan_kategori' in df_exp
 
     
 else:
-    st.info("Column 'temuan.nama' not found for object analysis.")
+    st.info("Column 'temuan_nama_spesifik' not found for object analysis.")
 
 # --- 8. Near Miss Table & Heatmap (Combined) ---
 st.markdown("<div style='margin-top: -30px;'></div>", unsafe_allow_html=True) # Pull up Row 3
@@ -417,9 +423,10 @@ with col_nm:
     st.caption("Temuan 'Near Miss' prioritas tinggi yang membutuhkan perhatian segera.")
     high_risk_df = df_master_filtered[df_master_filtered['temuan_kategori'] == 'Near Miss']
 
+    st.write(df_master_filtered)
     if not high_risk_df.empty:
         # Columns: kode_temuan as first column, removed deadline_sla
-        cols_to_show = ['kode_temuan', 'tanggal', 'temuan.nama', 'temuan.kondisi.lemma', 'nama_lokasi', 'temuan_status']
+        cols_to_show = ['kode_temuan', 'tanggal', 'temuan_nama_spesifik', 'nama_lokasi', 'temuan_status']
         # Filter valid columns
         valid_cols = [c for c in cols_to_show if c in high_risk_df.columns]
         

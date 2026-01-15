@@ -38,9 +38,9 @@ c1, c2 = st.columns(2)
 with c1:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Pelapor Aktif</h3>
-        <h2>{unique_reporters}</h2>
-        <p style="color:grey; font-size:0.8rem;">Kontributor unik</p>
+        <h3>Total Pelapor Aktif</h3>
+        <h1>{unique_reporters}</h1>
+        <p style="color:grey; font-size:0.8rem;">Kontributor</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -48,7 +48,7 @@ with c2:
     st.markdown(f"""
     <div class="metric-card">
         <h3>Beban Kerja Maksimal</h3>
-        <h2>{max_workload} Temuan</h2>
+        <h1>{max_workload} Temuan</h1>
         <p style="color:grey; font-size:0.8rem;">Oleh: {top_pic}</p>
     </div>
     """, unsafe_allow_html=True)
@@ -57,7 +57,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 # --- Tabs for Analysis ---
 # --- C. Data Processing for Tabs ---
-dept_col = 'team_role' if 'team_role' in df_master_filtered.columns else None
+dept_col = 'creator_departemen' if 'creator_departemen' in df_master_filtered.columns else None
 df_dept = pd.DataFrame()
 
 if dept_col:
@@ -212,7 +212,7 @@ with tab_dept:
                 )
                 st.plotly_chart(fig_dept, use_container_width=True)
         else:
-            st.info("Data departemen (team_role) tidak ditemukan.")
+            st.info("Data departemen (creator_departemen) tidak ditemukan.")
         
         st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
 
@@ -220,16 +220,16 @@ with tab_dept:
         st.subheader("Matriks Kategori Temuan Departemen")
         st.caption("Rincian temuan berdasarkan departemen dan kategori risiko.")
         
-        if 'team_role' in df_master_filtered.columns and 'temuan_kategori' in df_master_filtered.columns:
+        if 'creator_departemen' in df_master_filtered.columns and 'temuan_kategori' in df_master_filtered.columns:
             # 1. Create the base matrix
-            df_matrix = df_master_filtered.groupby(['team_role', 'temuan_kategori']).size().reset_index(name='Count')
+            df_matrix = df_master_filtered.groupby(['creator_departemen', 'temuan_kategori']).size().reset_index(name='Count')
             
             # Truncate long department names (max 30 chars)
             def truncate_role(name, limit=30):
                 name = str(name)
                 return name[:limit] + "..." if len(name) > limit else name
         
-        df_matrix['DisplayRole'] = df_matrix['team_role'].apply(truncate_role)
+        df_matrix['DisplayRole'] = df_matrix['creator_departemen'].apply(truncate_role)
         
         # 2. View Options
         c_view, _ = st.columns([1, 2])
@@ -271,7 +271,7 @@ with tab_dept:
             
             with c_scroll:
                 # Dynamic height calculation
-                unique_roles = df_matrix['team_role'].nunique()
+                unique_roles = df_matrix['creator_departemen'].nunique()
                 dynamic_height = max(400, unique_roles * 40)
                 
                 # --- 1. Fixed Header (X-Axis Categories) ---
@@ -359,7 +359,7 @@ with tab_dept:
     with col_right:
         # --- Dept Radar Chart ---
         st.subheader("Budaya Pelaporan Departemen")
-        st.caption("Radar 3-sumbu: Keaktifan, Upaya, RCI.")
+        st.caption("Radar 3-sumbu: Keaktifan, Upaya, Reporting Culture Index")
         
         if not df_dept.empty and dept_col:
             all_depts = df_dept[dept_col].tolist()
@@ -420,15 +420,15 @@ with tab_personnel:
             'kode_temuan': 'count',
             'temuan_status': lambda x: (x == 'Open').sum()
         }
-        if 'role' in df_master_filtered.columns: agg_dict['role'] = 'first'
-        if 'team_role' in df_master_filtered.columns: agg_dict['team_role'] = 'first'
+        if 'creator_role' in df_master_filtered.columns: agg_dict['creator_role'] = 'first'
+        if 'creator_departemen' in df_master_filtered.columns: agg_dict['creator_departemen'] = 'first'
         
         df_perf = df_master_filtered.groupby('creator_name').agg(agg_dict).reset_index()
         
         # Renaissance Columns
         new_cols = ['Reporter', 'Total Findings', 'Open Count']
-        if 'role' in df_master_filtered.columns: new_cols.append('Role')
-        if 'team_role' in df_master_filtered.columns: new_cols.append('Team Role')
+        if 'creator_role' in df_master_filtered.columns: new_cols.append('Role')
+        if 'creator_departemen' in df_master_filtered.columns: new_cols.append('Team Role')
         df_perf.columns = new_cols
         
         # Calculate Closed Count for Color
@@ -445,7 +445,7 @@ with tab_personnel:
                                  size_max=40, # Make bubbles slightly larger
                                  color='Closed Count',
                                  color_continuous_scale='Teal',
-                                 title="<br><sup style='color:#00526A'>X: Total Laporan | Y: Total Closed | Warna: Jumlah Closed</sup>")
+                                 title="<br>")
         
         # fig_scatter.update_traces(textposition='top center') # Removed
         fig_scatter.update_traces(marker=dict(opacity=0.7, line=dict(width=1, color='DarkSlateGrey')))
@@ -485,11 +485,11 @@ with tab_personnel:
 
     # --- E. Personnel Detail (inside tab_personnel) ---
     with st.container():
-        st.subheader("Individual Detail")
+        st.subheader("Detail tiap Inspector")
     
     # --- Filters for Fast Finding (Compass Layout) ---
-    roles_list = ["All"] + sorted(df_master_filtered['role'].dropna().unique().tolist()) if 'role' in df_master_filtered.columns else ["All"]
-    teams_list = ["All"] + sorted(df_master_filtered['team_role'].dropna().unique().tolist()) if 'team_role' in df_master_filtered.columns else ["All"]
+    roles_list = ["All"] + sorted(df_master_filtered['creator_role'].dropna().unique().tolist()) if 'creator_role' in df_master_filtered.columns else ["All"]
+    teams_list = ["All"] + sorted(df_master_filtered['creator_departemen'].dropna().unique().tolist()) if 'creator_departemen' in df_master_filtered.columns else ["All"]
     
     col_f1, col_f2, col_f3 = st.columns(3) # 3 Column Layout
     
@@ -502,9 +502,9 @@ with tab_personnel:
     df_reporters = df_master_filtered.copy()
 
     if sel_team != "All":
-        df_reporters = df_reporters[df_reporters['team_role'] == sel_team]
+        df_reporters = df_reporters[df_reporters['creator_departemen'] == sel_team]
     if sel_role != "All":
-        df_reporters = df_reporters[df_reporters['role'] == sel_role]
+        df_reporters = df_reporters[df_reporters['creator_role'] == sel_role]
         
     reporters = sorted(df_reporters['creator_name'].dropna().unique()) if 'creator_name' in df_reporters.columns else []
     
@@ -514,19 +514,19 @@ with tab_personnel:
         # Data reported by this person
         df_reported_by = df_master_filtered[df_master_filtered['creator_name'] == selected_reporter]
         
-        # Data assigned to/closed by this person (using nama_pic)
+        # Data assigned to/closed by this person (using pic_name)
         closed_by_count = 0
-        if 'nama_pic' in df_master_filtered.columns:
+        if 'pic_name' in df_master_filtered.columns:
             # We count cases where they are the PIC and the status is Closed
             df_closed_by = df_master_filtered[
-                (df_master_filtered['nama_pic'] == selected_reporter) & 
+                (df_master_filtered['pic_name'] == selected_reporter) & 
                 (df_master_filtered['temuan_status'].str.lower() == 'closed')
             ]
             closed_by_count = df_closed_by.shape[0]
         
         # 1. Header Info (Role & Team Role)
-        role = df_reported_by['role'].iloc[0] if 'role' in df_reported_by.columns else "Unknown Role"
-        team_role = df_reported_by['team_role'].iloc[0] if 'team_role' in df_reported_by.columns else "Unknown Team"
+        role = df_reported_by['creator_role'].iloc[0] if 'creator_role' in df_reported_by.columns else "Unknown Role"
+        creator_departemen = df_reported_by['creator_departemen'].iloc[0] if 'creator_departemen' in df_reported_by.columns else "Unknown Team"
         
         # --- COMPACT HEADER ROW (Name + Stats) ---
         c_head, c_stats = st.columns([1.5, 1])
@@ -536,7 +536,7 @@ with tab_personnel:
             <h3 style='margin-bottom:0;'>{selected_reporter}</h3>
             <div style='display:flex; gap: 15px; align-items: baseline;'>
                 <div><b style='color:#00526A;'>{role}</b> <span style='font-size:0.8rem; color:grey;'>(role)</span></div>
-                <div><b style='color:#00526A;'>{team_role}</b> <span style='font-size:0.8rem; color:grey;'>(team)</span></div>
+                <div><b style='color:#00526A;'>{creator_departemen}</b> <span style='font-size:0.8rem; color:grey;'>(team)</span></div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -581,13 +581,56 @@ with tab_personnel:
                 st.plotly_chart(fig_pie, use_container_width=True)
                 
         with c_table:
-            st.markdown("**Recent Reports**")
-            st.dataframe(
-                df_reported_by[['kode_temuan', 'tanggal', 'temuan_kategori', 'temuan_status']].head(5), 
-                use_container_width=True,
-                height=200, # Match Pie Chart
-                hide_index=True
-            )
+            st.markdown("**Kalender Aktivitas**")
+            
+            # Create calendar heatmap from tanggal data
+            if 'tanggal' in df_reported_by.columns and not df_reported_by['tanggal'].isna().all():
+                df_calendar = df_reported_by.copy()
+                df_calendar['date'] = pd.to_datetime(df_calendar['tanggal']).dt.date
+                
+                # Count findings per day
+                daily_counts = df_calendar.groupby('date').size().reset_index(name='count')
+                daily_counts['date'] = pd.to_datetime(daily_counts['date'])
+                daily_counts['week'] = daily_counts['date'].dt.isocalendar().week
+                daily_counts['dayofweek'] = daily_counts['date'].dt.dayofweek
+                daily_counts['day_name'] = daily_counts['date'].dt.strftime('%a')
+                daily_counts['date_label'] = daily_counts['date'].dt.strftime('%d %b')
+                
+                # Create heatmap calendar
+                fig_cal = go.Figure(data=go.Heatmap(
+                    x=daily_counts['date_label'],
+                    y=daily_counts['day_name'],
+                    z=daily_counts['count'],
+                    colorscale=[[0, '#E3F2FD'], [0.5, '#1976D2'], [1, '#0D47A1']],
+                    showscale=False,
+                    hovertemplate='%{x}<br>%{z} temuan<extra></extra>'
+                ))
+                
+                # Add text annotations manually for each cell
+                annotations = []
+                for i, row in daily_counts.iterrows():
+                    annotations.append(dict(
+                        x=row['date_label'],
+                        y=row['day_name'],
+                        text=str(row['count']),
+                        showarrow=False,
+                        font=dict(size=11, color='white')
+                    ))
+                
+                fig_cal.update_layout(
+                    annotations=annotations,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    height=180,
+                    xaxis=dict(side='top', tickfont=dict(size=9)),
+                    yaxis=dict(tickfont=dict(size=9), categoryorder='array', 
+                              categoryarray=['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+                )
+                
+                st.plotly_chart(fig_cal, use_container_width=True)
+            else:
+                st.info("Tidak ada data tanggal")
         
         # 3. Location Map (Where did this person report findings?)
         st.markdown("---")
