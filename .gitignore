@@ -5,7 +5,8 @@ venv/
 .env
 
 # Streamlit
-#.streamlit/secrets.toml
+.streamlit/secrets.toml
+secrets.toml
 
 # OS
 .DS_Store
@@ -20,5 +21,8 @@ data/
 debug_*.py
 temp_debug_merge.py
 test_folium.py
+
+# IDE
+.vscode/
+.idea/
 .md/
-.streamlit/
