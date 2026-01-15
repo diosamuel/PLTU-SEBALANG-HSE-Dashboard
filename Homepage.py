@@ -457,7 +457,7 @@ with col_map:
             if map_key not in st.session_state:
                 m_home = folium.Map(location=[center_lat, center_lon], zoom_start=16)
                 folium.TileLayer(
-                    tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg',
+                    tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg?api_key=0956e908-f9e5-41a5-9d89-f01b65803cc9',
                     attr='&copy; CNES, Distribution Airbus DS, &copy; Airbus DS, &copy; PlanetObserver | &copy; Stadia Maps',
                     name='Stadia Satellite'
                 ).add_to(m_home)

@@ -87,7 +87,7 @@ with tab1:
             if selected_parent == "Semua":
                 # Show aggregated by parent (first word)
                 col_analysis = 'temuan_parent'
-                chart_title = "<b>Kategori Parent Teratas</b><br><sup style='color:grey'>Agregasi berdasarkan kata pertama temuan (Prinsip 80/20).</sup>"
+                chart_title = "<b>Kategori Parent Teratas</b>"
             else:
                 # Show specific items within the selected parent
                 col_analysis = 'temuan_nama_spesifik'

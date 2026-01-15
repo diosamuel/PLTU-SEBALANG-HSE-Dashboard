@@ -33,9 +33,9 @@ with col_map:
             if map_key not in st.session_state:
                 m = folium.Map(location=[center_lat, center_lon], zoom_start=17)
                 
-                # Satellite Layer
+                # Satellite Layer (Stadia Maps with API key)
                 folium.TileLayer(
-                    tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg',
+                    tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg?api_key=0956e908-f9e5-41a5-9d89-f01b65803cc9',
                     attr='&copy; Stadia Maps', name='Stadia Satellite'
                 ).add_to(m)
                 
@@ -94,7 +94,7 @@ with col_map:
                     style='position: absolute; z-index:9999; background-color: rgba(255, 255, 255, 0.85);
                         border-radius: 8px; padding: 10px; font-size: 12px; bottom: 30px; left: 30px; 
                         border: 1px solid grey; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); font-family: sans-serif;'>
-                    <div class='legend-title' style='font-weight: bold; margin-bottom: 5px; font-size: 14px;'>Kategori Temuan (Pin & Heat)</div>
+                    <div class='legend-title' style='font-weight: bold; margin-bottom: 5px; font-size: 14px;'>Kategori Temuan</div>
                     <div class='legend-scale'>
                     <ul class='legend-labels' style='list-style: none; padding: 0; margin: 0;'>
                         <li style='margin-bottom: 5px;'><span style='background:{HSE_COLOR_MAP['Near Miss']}; width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 50%;'></span>Near Miss</li>

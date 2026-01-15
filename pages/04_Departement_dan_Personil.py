@@ -372,7 +372,7 @@ with tab_dept:
                 text_positions = ['top center', 'bottom center', 'middle left', 'middle right', 'top left', 'top right']
                 
                 for trace_idx, (index, row) in enumerate(df_radar.iterrows()):
-                    categories = ['RCI', 'Faktor Upaya<br>(Jumlah Closing)', 'Poin Keaktifan<br>(Jumlah Temuan)']
+                    categories = ['Reporting<br>Culture<br>Index', 'Faktor Upaya<br>(Jumlah Closing)', 'Poin Keaktifan<br>(Jumlah Temuan)']
                     values = [row['RCI'], row['Effort'], row['Activeness']]
                     categories = categories + [categories[0]]
                     values = values + [values[0]]
@@ -654,9 +654,9 @@ with tab_personnel:
                 
                 m = folium.Map(location=[center_lat, center_lon], zoom_start=15)
                 
-                # Stadia Satellite Layer
+                # Stadia Satellite Layer (with API key)
                 folium.TileLayer(
-                    tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg',
+                    tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg?api_key=0956e908-f9e5-41a5-9d89-f01b65803cc9',
                     attr='&copy; Stadia Maps', name='Stadia Satellite'
                 ).add_to(m)
                 
