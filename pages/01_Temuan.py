@@ -215,7 +215,7 @@ with tab1:
 
             # Dynamic title based on selection
             if selected_parent == "Semua":
-                tree_title = "<b>Hirarki Parent → Child</b><br><sup style='color:grey'>Kata pertama sebagai parent, detail temuan sebagai child.</sup>"
+                tree_title = "<b>Treemap Temuan</b><br><sup style='color:grey'>Kata pertama sebagai parent, detail temuan sebagai child.</sup>"
             else:
                 tree_title = f"<b>Detail '{selected_parent.upper()}'</b><br><sup style='color:grey'>Semua temuan dalam kategori '{selected_parent}'.</sup>"
             
@@ -228,15 +228,37 @@ with tab1:
                 title=tree_title
             )
             
-            # Styling
-            fig_tree.update_traces(
-                root_color="white", 
-                marker_line_width=2,
-                marker_line_color="white",
-                textfont=dict(size=18, color="white"),
-                texttemplate="<b>%{label}</b><br>%{value}",
-                hovertemplate="<b>%{label}</b><br>Findings: %{value}<extra></extra>"
-            )
+            # Calculate dynamic text colors based on count values
+            # Black text for low values (light background), White for high values (dark background)
+            if not df_obj_tree.empty and 'Count' in df_obj_tree.columns:
+                max_count = df_obj_tree['Count'].max()
+                min_count = df_obj_tree['Count'].min()
+                threshold = (max_count + min_count) / 2  # Midpoint as threshold
+                
+                # Create color array for each cell based on count
+                # Note: Treemap creates hierarchical cells, so we use textfont with customdata
+                fig_tree.update_traces(
+                    root_color="white", 
+                    marker_line_width=2,
+                    marker_line_color="white",
+                    textfont=dict(size=16),
+                    texttemplate="<b>%{label}</b><br>%{value}",
+                    hovertemplate="<b>%{label}</b><br>Temuan: %{value}<extra></extra>",
+                    # Dynamic text color: dark for small values, light for large values
+                    insidetextfont=dict(
+                        color=["#000000" if v < threshold else "#FFFFFF" for v in df_obj_tree['Count']]
+                    ) if len(df_obj_tree) > 0 else dict(color="white")
+                )
+            else:
+                # Fallback styling
+                fig_tree.update_traces(
+                    root_color="white", 
+                    marker_line_width=2,
+                    marker_line_color="white",
+                    textfont=dict(size=16, color="white"),
+                    texttemplate="<b>%{label}</b><br>%{value}",
+                    hovertemplate="<b>%{label}</b><br>Temuan: %{value}<extra></extra>"
+                )
 
             fig_tree.update_layout(
                 height=500, 
@@ -253,7 +275,7 @@ with tab2:
     # st.subheader("Condition Wordcloud")
     st.caption("Visualisasi kata yang paling sering muncul berdasarkan data temuan")
     
-    # Interactive Wordcloud using wordcloud2.js (embedded HTML/JS)
+    # Interactive Wordcloud using wordcloud2.js (stable version)
     def render_wordcloud_interactive(frequency_dict, color_scheme='blue', title=""):
         """
         Renders an interactive wordcloud using wordcloud2.js library.
@@ -266,7 +288,7 @@ with tab2:
             st.info("Tidak ada data untuk wordcloud")
             return
         
-        # Color palettes
+        # Color palettes - gradient from dark to light
         color_palettes = {
             'blue': ['#0D47A1', '#1565C0', '#1976D2', '#1E88E5', '#42A5F5', '#64B5F6'],
             'red': ['#B71C1C', '#C62828', '#D32F2F', '#E53935', '#EF5350', '#E57373'],
@@ -276,168 +298,128 @@ with tab2:
         }
         colors = color_palettes.get(color_scheme, color_palettes['blue'])
         
-        # Prepare word list for wordcloud2.js: [[word, weight], ...]
+        # Prepare word list: [[word, weight], ...]
         max_freq = max(frequency_dict.values())
         word_list = [[word, int((freq / max_freq) * 100)] for word, freq in frequency_dict.items()]
         word_list_json = json.dumps(word_list)
-        freq_dict_json = json.dumps(frequency_dict)
         colors_json = json.dumps(colors)
         
         # Generate unique canvas ID
         import hashlib
-        canvas_id = f"wordcloud_{hashlib.md5(str(frequency_dict).encode()).hexdigest()[:8]}"
+        canvas_id = f"wc_{hashlib.md5(str(frequency_dict).encode()).hexdigest()[:8]}"
         
         html_code = f"""
         <!DOCTYPE html>
         <html>
         <head>
+            <meta charset="UTF-8">
             <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
             <style>
-                body {{
-                    margin: 0;
-                    padding: 0;
-                    overflow: hidden;
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{ 
                     background: transparent;
+                    overflow: hidden;
                 }}
                 #container {{
-                    position: relative;
                     width: 100%;
                     height: 350px;
+                    position: relative;
                 }}
                 #{canvas_id} {{
-                    width: 100%;
-                    height: 100%;
-                }}
-                #tooltip {{
-                    position: absolute;
-                    background: rgba(0, 82, 106, 0.95);
-                    color: white;
-                    padding: 8px 14px;
-                    border-radius: 8px;
-                    font-family: 'Segoe UI', sans-serif;
-                    font-size: 13px;
-                    pointer-events: none;
-                    opacity: 0;
-                    transition: opacity 0.2s ease;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-                    z-index: 1000;
-                }}
-                #tooltip.visible {{
-                    opacity: 1;
-                }}
-                #tooltip .word {{
-                    font-weight: 700;
-                    font-size: 15px;
-                }}
-                #tooltip .freq {{
-                    opacity: 0.9;
-                    margin-top: 2px;
+                    width: 100% !important;
+                    height: 100% !important;
                 }}
             </style>
         </head>
         <body>
             <div id="container">
                 <canvas id="{canvas_id}"></canvas>
-                <div id="tooltip">
-                    <div class="word"></div>
-                    <div class="freq"></div>
-                </div>
             </div>
             <script>
-                const wordList = {word_list_json};
-                const freqDict = {freq_dict_json};
-                const colors = {colors_json};
-                const canvas = document.getElementById('{canvas_id}');
-                const tooltip = document.getElementById('tooltip');
-                const container = document.getElementById('container');
-                
-                // Resize canvas to container
-                function resizeCanvas() {{
+                (function() {{
+                    const wordList = {word_list_json};
+                    const colors = {colors_json};
+                    const canvas = document.getElementById('{canvas_id}');
+                    const container = document.getElementById('container');
+                    
+                    // Set canvas size
                     canvas.width = container.offsetWidth;
                     canvas.height = container.offsetHeight;
-                }}
-                resizeCanvas();
-                
-                // Color function
-                function getColor(word, weight) {{
-                    const idx = Math.floor((weight / 100) * (colors.length - 1));
-                    return colors[Math.min(idx, colors.length - 1)];
-                }}
-                
-                // Wordcloud options
-                const options = {{
-                    list: wordList,
-                    gridSize: 8,
-                    weightFactor: function(size) {{
-                        return Math.pow(size, 1.2) * (canvas.width / 400);
-                    }},
-                    fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
-                    fontWeight: '600',
-                    color: getColor,
-                    backgroundColor: 'transparent',
-                    rotateRatio: 0.3,
-                    rotationSteps: 2,
-                    shuffle: true,
-                    drawOutOfBound: false,
-                    shrinkToFit: true,
-                    hover: function(item, dimension, event) {{
-                        if (item) {{
-                            const word = item[0];
-                            const freq = freqDict[word] || 0;
-                            tooltip.querySelector('.word').textContent = word;
-                            tooltip.querySelector('.freq').textContent = 'Frekuensi: ' + freq;
-                            tooltip.classList.add('visible');
-                            
-                            // Position tooltip
-                            const rect = container.getBoundingClientRect();
-                            let x = event.clientX - rect.left + 15;
-                            let y = event.clientY - rect.top - 10;
-                            
-                            // Keep tooltip in bounds
-                            if (x + 150 > container.offsetWidth) x = x - 170;
-                            if (y + 60 > container.offsetHeight) y = y - 50;
-                            
-                            tooltip.style.left = x + 'px';
-                            tooltip.style.top = y + 'px';
-                        }} else {{
-                            tooltip.classList.remove('visible');
-                        }}
-                    }},
-                    click: function(item) {{
-                        if (item) {{
-                            console.log('Clicked:', item[0]);
-                        }}
+                    
+                    // Color function
+                    function getColor(word, weight) {{
+                        const idx = Math.floor((weight / 100) * (colors.length - 1));
+                        return colors[Math.min(idx, colors.length - 1)];
                     }}
-                }};
-                
-                // Render wordcloud
-                WordCloud(canvas, options);
-                
-                // Hide tooltip when mouse leaves
-                container.addEventListener('mouseleave', function() {{
-                    tooltip.classList.remove('visible');
-                }});
+                    
+                    // Wordcloud configuration (hover DISABLED to prevent bugs)
+                    const options = {{
+                        list: wordList,
+                        gridSize: Math.round(16 * canvas.width / 1024),
+                        weightFactor: function(size) {{
+                            return Math.pow(size, 1.3) * canvas.width / 800;
+                        }},
+                        fontFamily: 'Impact, Arial Black, sans-serif',
+                        fontWeight: 'normal',
+                        color: getColor,
+                        backgroundColor: 'transparent',
+                        rotateRatio: 0.4,
+                        rotationSteps: 2,
+                        shuffle: true,
+                        drawOutOfBound: false,
+                        shrinkToFit: true,
+                        minSize: 0,
+                        ellipticity: 0.65,
+                        wait: 0,
+                        abortThreshold: 0,
+                        abort: function() {{ return false; }}
+                        // NO HOVER - this is what causes the bug
+                    }};
+                    
+                    // Render
+                    try {{
+                        if (typeof WordCloud !== 'undefined') {{
+                            WordCloud(canvas, options);
+                        }} else {{
+                            console.error('WordCloud not loaded');
+                        }}
+                    }} catch (e) {{
+                        console.error('WordCloud error:', e);
+                    }}
+                }})();
             </script>
         </body>
         </html>
         """
         
-        components.html(html_code, height=370)
+        components.html(html_code, height=370, scrolling=False)
 
     # --- Real Data from DataFrame ---
     # Kata Sifat (Conditions) from temuan_kondisi column
     kata_sifat_data = {}
     if 'temuan_kondisi' in df_exploded_filtered.columns:
         kondisi_series = df_exploded_filtered['temuan_kondisi'].dropna().astype(str)
-        kondisi_series = kondisi_series[kondisi_series.str.strip() != '']
-        kata_sifat_data = kondisi_series.value_counts().head(20).to_dict()
+        # Filter out 'None', 'nan', empty strings
+        kondisi_series = kondisi_series[
+            (kondisi_series.str.strip() != '') & 
+            (kondisi_series.str.lower() != 'none') &
+            (kondisi_series.str.lower() != 'nan')
+        ]
+        if len(kondisi_series) > 0:
+            kata_sifat_data = kondisi_series.value_counts().head(20).to_dict()
     
-    # Kata Benda (Objects) from temuan_nama_spesifik_spesifik column
+    # Kata Benda (Objects) from temuan_nama_spesifik column
     kata_benda_data = {}
     if 'temuan_nama_spesifik' in df_exploded_filtered.columns:
         nama_series = df_exploded_filtered['temuan_nama_spesifik'].dropna().astype(str)
-        nama_series = nama_series[nama_series.str.strip() != '']
-        kata_benda_data = nama_series.value_counts().head(20).to_dict()
+        # Filter out 'None', 'nan', empty strings
+        nama_series = nama_series[
+            (nama_series.str.strip() != '') & 
+            (nama_series.str.lower() != 'none') &
+            (nama_series.str.lower() != 'nan')
+        ]
+        if len(nama_series) > 0:
+            kata_benda_data = nama_series.value_counts().head(20).to_dict()
     
     # --- Layout ---
     wc_col1, wc_col2 = st.columns(2)
@@ -445,18 +427,20 @@ with tab2:
     with wc_col1:
         st.markdown("**Kondisi Temuan**")
         st.caption("Kondisi yang paling sering dilaporkan dalam temuan.")
-        if kata_sifat_data:
+        if kata_sifat_data and len(kata_sifat_data) > 0:
+            st.write(f"📊 {len(kata_sifat_data)} kata unik ditemukan")
             render_wordcloud_interactive(kata_sifat_data, 'red')
         else:
-            st.info("Tidak ada data kondisi temuan")
+            st.info("Tidak ada data kondisi temuan yang valid")
         
     with wc_col2:
         st.markdown("**Objek Temuan**")
         st.caption("Objek atau komponen spesifik yang paling sering ditemukan.")
-        if kata_benda_data:
+        if kata_benda_data and len(kata_benda_data) > 0:
+            st.write(f"📊 {len(kata_benda_data)} objek unik ditemukan")
             render_wordcloud_interactive(kata_benda_data, 'blue')
         else:
-            st.info("Tidak ada data objek temuan")
+            st.info("Tidak ada data objek temuan yang valid")
 
 # --- OLD WORDCLOUD CODE FROZEN BELOW ---
 # """

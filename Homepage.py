@@ -423,7 +423,7 @@ with col_nm:
     st.caption("Temuan 'Near Miss' prioritas tinggi yang membutuhkan perhatian segera.")
     high_risk_df = df_master_filtered[df_master_filtered['temuan_kategori'] == 'Near Miss']
 
-    st.write(df_master_filtered)
+    # st.write(df_master_filtered)
     if not high_risk_df.empty:
         # Columns: kode_temuan as first column, removed deadline_sla
         cols_to_show = ['kode_temuan', 'tanggal', 'temuan_nama_spesifik', 'nama_lokasi', 'temuan_status']
