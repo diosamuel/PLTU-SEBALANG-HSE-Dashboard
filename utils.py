@@ -179,8 +179,11 @@ def load_data():
             ON f.target_date_sk = dd_target.target_date_sk
         """
         
-        # Execute query using pandas with engine
-        df_master = pd.read_sql(query, engine)
+        # Execute query using raw DBAPI connection for pandas compatibility
+        with engine.connect() as conn:
+            # Get underlying DBAPI connection that pandas expects
+            raw_conn = conn.connection
+            df_master = pd.read_sql(query, raw_conn)
 
         # --- PYTHON POST-PROCESSING ---
         
