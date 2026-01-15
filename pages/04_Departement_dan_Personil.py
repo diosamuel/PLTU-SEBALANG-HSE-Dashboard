@@ -330,11 +330,13 @@ with tab_dept:
                         cmin=0, cmax=z_max,
                         color=[0, z_max],
                         colorbar=dict(
-                            title="Jumlah",
-                            titleside="right",
+                            title=dict(
+                                text="Jumlah",
+                                side="right",
+                                font=dict(color="#00526A", size=12)
+                            ),
                             thickness=15,
                             len=0.8,
-                            titlefont=dict(color="#00526A", size=12),
                             tickfont=dict(color="#00526A", size=10)
                         )
                     ),
