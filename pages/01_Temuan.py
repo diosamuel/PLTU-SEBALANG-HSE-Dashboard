@@ -347,7 +347,7 @@ with tab2:
             (nama_series.str.lower() != 'nan')
         ]
         if len(nama_series) > 0:
-            kata_benda_data = nama_series.value_counts().head(20).to_dict()
+            kata_benda_data = nama_series.value_counts().head(word_limit).to_dict()
     
     # --- Layout ---
     wc_col1, wc_col2 = st.columns(2)
@@ -356,7 +356,7 @@ with tab2:
         st.markdown("**Kondisi Temuan**")
         st.caption("Kondisi yang paling sering dilaporkan dalam temuan.")
         if kata_sifat_data and len(kata_sifat_data) > 0:
-            st.caption(f"📊 {len(kata_sifat_data)} kata unik")
+            st.caption(f"{len(kata_sifat_data)} kata unik")
             render_wordcloud_interactive(kata_sifat_data, 'red')
         else:
             st.info("Tidak ada data kondisi temuan yang valid")
@@ -365,7 +365,7 @@ with tab2:
         st.markdown("**Objek Temuan**")
         st.caption("Nama temuan yang paling sering ditemukan.")
         if kata_benda_data and len(kata_benda_data) > 0:
-            st.caption(f"📊 {len(kata_benda_data)} objek unik")
+            st.caption(f"{len(kata_benda_data)} objek unik")
             render_wordcloud_interactive(kata_benda_data, 'green')
         else:
             st.info("Tidak ada data objek temuan yang valid")

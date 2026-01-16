@@ -39,8 +39,7 @@ with c1:
     st.markdown(f"""
     <div class="metric-card">
         <h3>Total Pelapor Aktif</h3>
-        <h1>{unique_reporters}</h1>
-        <p style="color:grey; font-size:0.8rem;">Kontributor</p>
+        <h1>{unique_reporters} Inspector</h1>
     </div>
     """, unsafe_allow_html=True)
 
@@ -497,9 +496,9 @@ with tab_personnel:
     
     col_f1, col_f2, col_f3 = st.columns(3) # 3 Column Layout
     
-    sel_team = col_f1.selectbox("Filter by Department:", teams_list)
+    sel_team = col_f1.selectbox("Filter berdasarkan Departemen:", teams_list)
 
-    sel_role = col_f2.selectbox("Filter by Role:", roles_list)
+    sel_role = col_f2.selectbox("Filter berdasarkan Role/Jabatan:", roles_list)
 
     
     # Filter Logic for selection list
@@ -512,7 +511,7 @@ with tab_personnel:
         
     reporters = sorted(df_reporters['creator_name'].dropna().unique()) if 'creator_name' in df_reporters.columns else []
     
-    selected_reporter = col_f3.selectbox("Select Personnel", options=reporters)
+    selected_reporter = col_f3.selectbox("Pilih Inspector", options=reporters)
     
     if selected_reporter:
         # Data reported by this person
@@ -549,11 +548,11 @@ with tab_personnel:
             st.markdown(f"""
             <div style="display:flex; gap: 10px; justify-content: flex-end;">
                 <div style="background: rgba(255,255,255,0.6); padding:5px 10px; border-radius:8px; border: 1px solid #CBECF5; text-align:center;">
-                    <span style="font-size:0.7rem; color:grey;">Reports</span>
+                    <span style="font-size:0.7rem; color:grey;">Total Reports</span>
                     <h3 style="margin:0; color:#00526A; font-size:1.2rem;">{df_reported_by.shape[0]}</h3>
                 </div>
                 <div style="background: rgba(255,255,255,0.6); padding:5px 10px; border-radius:8px; border: 1px solid #CBECF5; text-align:center;">
-                    <span style="font-size:0.7rem; color:grey;">Closed (PIC)</span>
+                    <span style="font-size:0.7rem; color:grey;">Total Closed (PIC)</span>
                     <h3 style="margin:0; color:#00526A; font-size:1.2rem;">{closed_by_count}</h3>
                 </div>
             </div>
