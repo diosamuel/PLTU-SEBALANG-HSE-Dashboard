@@ -6,33 +6,88 @@ import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 from utils import load_data, render_sidebar, set_header_title, HSE_COLOR_MAP
 
+# ============================================
+# HELPER FUNCTIONS (Global)
+# ============================================
+
+def render_wordcloud_interactive(frequency_dict, color_scheme='blue', title=""):
+    if not frequency_dict:
+        st.info("Tidak ada data untuk wordcloud")
+        return
+
+    # Flat colors (NO gradient)
+    flat_colors = {
+        'blue': '#1f77b4',
+        'red': '#d62728',
+        'green': '#2ca02c',
+        'orange': '#ff7f0e',
+        'purple': '#9467bd'
+    }
+    color = flat_colors.get(color_scheme, '#1f77b4')
+
+    try:
+        wordcloud = WordCloud(
+            width=800,
+            height=400,
+            background_color=None,
+            mode='RGB',                # ✅ NO opacity
+            color_func=lambda *args, **kwargs: color,  # ✅ flat color
+            relative_scaling=0.5,
+            min_font_size=10,
+            max_font_size=100,
+            prefer_horizontal=0.7,
+            collocations=False,
+            margin=10
+        ).generate_from_frequencies(frequency_dict)
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.imshow(wordcloud, interpolation='bilinear')
+        ax.axis('off')
+        plt.tight_layout(pad=0)
+
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+    except Exception as e:
+        st.error(f"Error generating wordcloud: {e}")
+
+def hex_to_rgba(hex_color, opacity=0.4):
+    """Convert hex color to rgba with specified opacity"""
+    hex_color = hex_color.lstrip('#')
+    if len(hex_color) == 6:
+        r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        return f"rgba({r}, {g}, {b}, {opacity})"
+    return f"rgba(0, 82, 106, {opacity})"
+
+# ============================================
+# CONSTANTS
+# ============================================
+
+# Custom color scale for charts
+CUSTOM_SCALE = [
+    [0.0, '#DCEEF3'],  # Light Blue
+    [1.0, '#00526A']   # PLN Dark Blue
+]
+
+# ============================================
+# PAGE CONFIGURATION
+# ============================================
+
 # Page Config
 st.set_page_config(page_title="Analisis Temuan", page_icon=None, layout="wide")
-
-# Styling
-# Loaded via utils.render_sidebar()
 
 # Data Loading
 df_exploded, df_master, _ = load_data()
 df_master_filtered, df_exploded_filtered, _ = render_sidebar(df_master, df_exploded)
 set_header_title("Analisis Temuan")
 
-
-
 # --- Tabs for Compact Layout ---
 tab1, tab2, tab3 = st.tabs(["Analisis Objek", "Analisis Kondisi", "Alur Kategori Temuan"])
 
-# --- A. Object Analysis (Pareto/Treemap) ---
+# ============================================
+# TAB 1: OBJECT ANALYSIS (PARETO/TREEMAP)
+# ============================================
 with tab1:
-    # st.subheader("Object Analysis") # Removed for compactness
-
-    # Consistent color gradient (matches your Risk Matrix)
-    # Consistent color gradient (matches your Risk Matrix and Homepage theme)
-    # Using explicit hex for consistent Blue gradient
-    custom_scale = [
-        [0.0, '#DCEEF3'],  # Light Blue (instead of transparent)     
-        [1.0, '#00526A']   # PLN Dark Blue           
-    ]
 
     # --- COMPACT CONTROLS ROW ---
     c_drill, c_limit, c_check = st.columns([1.5, 1, 1])
@@ -78,12 +133,8 @@ with tab1:
         # --- CHART LAYOUT (Side-by-Side) ---
         col_pareto, col_treemap = st.columns(2)
 
-            # --- 1. PARETO CHART (Left) ---
+        # --- 1. PARETO CHART (Left) ---
         with col_pareto:
-            # Dynamic Column Selection:
-            # - If "Semua" selected -> Analyze Parent Categories (first word)
-            # - If "Specific Parent" selected -> Analyze full temuan_nama_spesifik within that parent
-            
             if selected_parent == "Semua":
                 # Show aggregated by parent (first word)
                 col_analysis = 'temuan_parent'
@@ -126,13 +177,10 @@ with tab1:
                     secondary_y=True
                 )
                 
-                # Annotations for Line Trace (to ensure readability on top of bars)
+                # Annotations for cumulative percentage
                 annotations = []
                 for index, row in df_plot.iterrows():
-                    # Stagger labels to prevent overlap
-                    # Even indices: standard height
-                    # Odd indices: shifted higher
-                    y_offset = 10 if index % 2 == 0 else 30
+                    y_offset = 10 if index % 2 == 0 else 30  # Stagger to prevent overlap
                     
                     annotations.append(dict(
                         x=row['Object'], 
@@ -154,15 +202,13 @@ with tab1:
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#00526A"),
-                    yaxis=dict(title="Jumlah Temuan", gridcolor='rgba(0,0,0,0.1)'), # Frequency -> Jumlah
-                    yaxis2=dict(title="Persentase Kumulatif Temuan (%)", range=[0, 115], showgrid=False), # Cumulative %
+                    yaxis=dict(title="Jumlah Temuan", gridcolor='rgba(0,0,0,0.1)'),
+                    yaxis2=dict(title="Persentase Kumulatif Temuan (%)", range=[0, 115], showgrid=False),
                     height=500,
-                    margin=dict(t=80, l=10, r=10, b=10) # Increased top margin for title
+                    margin=dict(t=80, l=10, r=10, b=10)
                 )
                 
-                # Add annotations to the secondary y-axis context if needed, 
-                # but standard layout annotations work on the plot area. 
-                # We need to map yref to 'y2' for the line values.
+                # Add annotations to secondary y-axis
                 for ann in annotations:
                     ann['xref'] = 'x'
                     ann['yref'] = 'y2'
@@ -211,7 +257,7 @@ with tab1:
             if breakdown_cat:
                  color_params = dict(color='temuan_kategori', color_discrete_map=HSE_COLOR_MAP)
             else:
-                 color_params = dict(color='Count', color_continuous_scale=custom_scale)
+                 color_params = dict(color='Count', color_continuous_scale=CUSTOM_SCALE)
 
             # Dynamic title based on selection
             if selected_parent == "Semua":
@@ -228,15 +274,12 @@ with tab1:
                 title=tree_title
             )
             
-            # Calculate dynamic text colors based on count values
-            # Black text for low values (light background), White for high values (dark background)
+            # Dynamic text colors: black for low values, white for high values
             if not df_obj_tree.empty and 'Count' in df_obj_tree.columns:
                 max_count = df_obj_tree['Count'].max()
                 min_count = df_obj_tree['Count'].min()
-                threshold = (max_count + min_count) / 2  # Midpoint as threshold
+                threshold = (max_count + min_count) / 2
                 
-                # Create color array for each cell based on count
-                # Note: Treemap creates hierarchical cells, so we use textfont with customdata
                 fig_tree.update_traces(
                     root_color="white", 
                     marker_line_width=2,
@@ -262,73 +305,23 @@ with tab1:
 
             fig_tree.update_layout(
                 height=500, 
-                margin=dict(t=80, l=10, r=10, b=10), # Aligned with Pareto
+                margin=dict(t=80, l=10, r=10, b=10),
                 paper_bgcolor="rgba(0,0,0,0)", 
                 plot_bgcolor="rgba(0,0,0,0)",
-                coloraxis_showscale=False # Clean look
+                coloraxis_showscale=False
             )
             
             st.plotly_chart(fig_tree, use_container_width=True)
 
-# --- B. Condition Wordcloud (Split: Adjectives & Nouns) ---
+# ============================================
+# TAB 2: CONDITION WORDCLOUD
+# ============================================
 with tab2:
-    # st.subheader("Condition Wordcloud")
     st.caption("Visualisasi kata yang paling sering muncul berdasarkan data temuan")
     
-    # Static Wordcloud using Python wordcloud library
-    def render_wordcloud_interactive(frequency_dict, color_scheme='blue', title=""):
-        """
-        Renders a static wordcloud using Python wordcloud library.
-        Color schemes: 'blue', 'red', 'green', 'orange', 'purple'
-        Reference: https://amueller.github.io/word_cloud/references.html
-        """
-        if not frequency_dict:
-            st.info("Tidak ada data untuk wordcloud")
-            return
-        
-        # Color schemes - using matplotlib colormaps
-        colormap_mapping = {
-            'blue': 'Blues',
-            'red': 'Reds',
-            'green': 'Greens',
-            'orange': 'Oranges',
-            'purple': 'Purples'
-        }
-        colormap = colormap_mapping.get(color_scheme, 'Blues')
-        
-        try:
-            # Generate wordcloud
-            wordcloud = WordCloud(
-                width=800,
-                height=400,
-                background_color=None,
-                mode='RGBA',
-                colormap=colormap,
-                relative_scaling=0.5,
-                min_font_size=10,
-                max_font_size=100,
-                prefer_horizontal=0.7,
-                font_path=None,  # Uses default font
-                collocations=False,
-                margin=10
-            ).generate_from_frequencies(frequency_dict)
-            
-            # Create matplotlib figure
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.imshow(wordcloud, interpolation='bilinear')
-            ax.axis('off')
-            fig.patch.set_alpha(0)  # Transparent background
-            ax.patch.set_alpha(0)
-            plt.tight_layout(pad=0)
-            
-            # Display in Streamlit
-            st.pyplot(fig, use_container_width=True)
-            plt.close(fig)
-            
-        except Exception as e:
-            st.error(f"Error generating wordcloud: {e}")
-            st.info("Data yang tersedia: " + ", ".join(list(frequency_dict.keys())[:5]) + "...")
-
+    # Single control for both wordclouds
+    word_limit = st.selectbox("Tampilkan Jumlah Kata:", [10, 20, 30, 50], index=1, key="wordcloud_limit")
+    
     # --- Real Data from DataFrame ---
     # Kata Sifat (Conditions) from temuan_kondisi column
     kata_sifat_data = {}
@@ -341,7 +334,7 @@ with tab2:
             (kondisi_series.str.lower() != 'nan')
         ]
         if len(kondisi_series) > 0:
-            kata_sifat_data = kondisi_series.value_counts().head(20).to_dict()
+            kata_sifat_data = kondisi_series.value_counts().head(word_limit).to_dict()
     
     # Kata Benda (Objects) from temuan_nama_spesifik column
     kata_benda_data = {}
@@ -363,7 +356,7 @@ with tab2:
         st.markdown("**Kondisi Temuan**")
         st.caption("Kondisi yang paling sering dilaporkan dalam temuan.")
         if kata_sifat_data and len(kata_sifat_data) > 0:
-            st.write(f"📊 {len(kata_sifat_data)} kata unik ditemukan")
+            st.caption(f"📊 {len(kata_sifat_data)} kata unik")
             render_wordcloud_interactive(kata_sifat_data, 'red')
         else:
             st.info("Tidak ada data kondisi temuan yang valid")
@@ -372,99 +365,68 @@ with tab2:
         st.markdown("**Objek Temuan**")
         st.caption("Nama temuan yang paling sering ditemukan.")
         if kata_benda_data and len(kata_benda_data) > 0:
-            # st.write(f"📊 {len(kata_benda_data)} objek unik ditemukan")
-            render_wordcloud_interactive(kata_benda_data, 'blue')
+            st.caption(f"📊 {len(kata_benda_data)} objek unik")
+            render_wordcloud_interactive(kata_benda_data, 'green')
         else:
             st.info("Tidak ada data objek temuan yang valid")
 
-# --- OLD WORDCLOUD CODE FROZEN BELOW ---
-# """
-#     if 'temuan.kondisi.lemma' in df_exploded_filtered.columns:
-#         text_data = " ".join(df_exploded_filtered['temuan.kondisi.lemma'].dropna().astype(str).tolist())
-#         ... (Original Logic Frozen) ...
-# """
-
-# --- C. Risk Category Matrix (MOVED TO PERSONNEL PAGE) ---
-# Code removed and transferred to 04_Personnel.py
-
+# ============================================
+# TAB 3: SANKEY FLOW ANALYSIS
+# ============================================
 with tab3:
-    # st.subheader("Risk Flow Analysis (Category → Object → Place)")
-
     if not df_exploded_filtered.empty:
         # --- Prepare Nodes & Links for Sankey ---
         # Flow: temuan_kategori -> temuan_nama_spesifik -> nama_lokasi
-        
-        has_parent = 'temuan_nama_spesifik' in df_exploded_filtered.columns
-        cols = ['temuan_kategori', 'temuan_nama_spesifik', 'nama_lokasi'] if has_parent else ['temuan_kategori', 'temuan_nama_spesifik', 'nama_lokasi']
+        cols = ['temuan_kategori', 'temuan_nama_spesifik', 'nama_lokasi']
         cols = [c for c in cols if c in df_exploded_filtered.columns]
         
         # Limit Control
         limit_options = [10, 20, 50, "All"]
         max_items = st.selectbox("Total Temuan", limit_options, index=0) # Default 10
-        
         if len(cols) >= 2:
             df_sankey = df_exploded_filtered[cols].dropna().copy()
             
-            # --- CLUTTER REDUCTION: Group "Small" Nodes to "Others" ---
+            # Limit nodes if needed
             if max_items != "All":
-                # 1. Limit Parents (Middle Node)
                 if len(cols) > 1:
                     parent_col = cols[1]
                     top_parents = df_sankey[parent_col].value_counts().head(max_items).index
                     df_sankey = df_sankey[df_sankey[parent_col].isin(top_parents)]
                 
-                # 2. Limit Locations (Target Node) - Grouping logic
                 if len(cols) > 2:
                     loc_col = cols[2]
                     top_locs = df_sankey[loc_col].value_counts().head(max_items).index
-                    # Replace non-top locations with "Others"
                     df_sankey[loc_col] = df_sankey[loc_col].apply(lambda x: x if x in top_locs else 'Others')
 
-            # 2. Assign unique index to all distinct labels
+            # Assign unique index to all distinct labels
             unique_labels = []
             for c in cols:
                 unique_labels.extend(df_sankey[c].unique().tolist())
             unique_labels = list(set(unique_labels))
             label_map = {label: i for i, label in enumerate(unique_labels)}
             
-            # --- COLOR MAPPING ---
-            # Colors matching Global HSE Palette
+            # Color mapping
             color_map = HSE_COLOR_MAP.copy()
             color_map['Safe'] = HSE_COLOR_MAP['Positive']
-            color_map['Others'] = '#B0BEC5' # Grey for "Others"
-            
-            # Default color for objects/places
+            color_map['Others'] = '#B0BEC5'
             default_node_color = "#00526A"
             
             node_colors = []
             for label in unique_labels:
-                # Check if label matches known categories
                 if label in color_map:
                     node_colors.append(color_map[label])
-                elif label == 'Others':
-                    node_colors.append(color_map['Others'])
                 else:
                     node_colors.append(default_node_color)
 
-            # Helper for transparency
-            def hex_to_rgba(hex_color, opacity=0.4):
-                hex_color = hex_color.lstrip('#')
-                if len(hex_color) == 6:
-                    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-                    return f"rgba({r}, {g}, {b}, {opacity})"
-                return f"rgba(0, 82, 106, {opacity})"
-
-            # 3. Build Links
+            # Build links between nodes
             source = []
             target = []
             value = []
             link_colors = []
             
-            # Helper: Map Parent -> Category for flow coloring
-            # df_sankey is already filtered. We can map each unique Parent to its dominant Category.
+            # Map parent objects to their dominant category for coloring
             parent_to_cat_map = {}
             if len(cols) > 1:
-                # Group by Parent (cols[1]), take most frequent Category (cols[0])
                 try:
                     p_to_c = df_sankey.groupby(cols[1])[cols[0]].agg(lambda x: x.mode()[0])
                     parent_to_cat_map = p_to_c.to_dict()
@@ -484,11 +446,10 @@ with tab3:
                     target.append(tgt_idx)
                     value.append(row['Count'])
                     
-                    # Determine Link Color based on Origin Category
+                    # Determine link color based on origin category
                     src_label = row[src_col]
                     origin_cat = src_label
                     
-                    # If source is a Parent node (Middle layer), look up its Category
                     if src_col == cols[1]:
                         origin_cat = parent_to_cat_map.get(src_label, src_label)
                     
@@ -501,11 +462,7 @@ with tab3:
                     
                     link_colors.append(hex_to_rgba(base_color, 0.4))
             
-            # Calculate Node Totals for Labels
-            node_values = {i: 0 for i in range(len(unique_labels))}
-            # Sum max flow for each node to represent throughput
-            # Since In == Out (mostly), we can sum incoming links for targets and outgoing for sources?
-            # Actually, standard Sankey logic: Value = max(total_in, total_out)
+            # Calculate node totals for labels
             node_in = {i: 0 for i in range(len(unique_labels))}
             node_out = {i: 0 for i in range(len(unique_labels))}
             
@@ -518,28 +475,26 @@ with tab3:
                 val = max(node_in[i], node_out[i])
                 formatted_labels.append(f"<b>{label}</b>: {val}")
 
-            # 4. Render
+            # Render Sankey diagram
             fig_sankey = go.Figure(data=[go.Sankey(
-                textfont = dict(color="#00526A", size=12, family="Source Sans Pro"),
-                node = dict(
-                pad = 15,
-                thickness = 20,
-                line = dict(color = "white", width = 0.5),
-                label = formatted_labels, # Labels with counts
-                color = node_colors 
+                textfont=dict(color="#00526A", size=12, family="Source Sans Pro"),
+                node=dict(
+                    pad=15,
+                    thickness=20,
+                    line=dict(color="white", width=0.5),
+                    label=formatted_labels,
+                    color=node_colors
                 ),
-                link = dict(
-                source = source,
-                target = target,
-                value = value,
-                color = link_colors
+                link=dict(
+                    source=source,
+                    target=target,
+                    value=value,
+                    color=link_colors
                 )
             )])
             
-            flow_desc = " → ".join([c.replace('temuan.', '').replace('_', ' ').title() for c in cols])
-            
             fig_sankey.update_layout(
-                title=dict(text=f"<b>Analisis Alur Kategori Temuan</b><br><sup style='color:grey'>Melacak pergerakan temuan dari Kategori ke Objek ke Lokasi.</sup><br>", font=dict(color="#00526A")),
+                title=dict(text="<b>Analisis Alur Kategori Temuan</b><br><sup style='color:grey'>Melacak pergerakan temuan dari Kategori ke Objek ke Lokasi.</sup>", font=dict(color="#00526A")),
                 paper_bgcolor="rgba(0,0,0,0)", 
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#00526A"),
@@ -550,5 +505,3 @@ with tab3:
             st.warning("Kolom data tidak cukup untuk alur Sankey.")
     else:
         st.info("Tidak ada data tersedia.")
-
-st.markdown("<br>", unsafe_allow_html=True)
