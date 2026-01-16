@@ -98,8 +98,7 @@ with col_map:
                         <b>Kondisi:</b> {kondisi}<br>
                         <b>Rekomendasi:</b> {rekomendasi}<br>
                         <b>Lokasi :</b> {location}<br>
-                        <b>Dibuka pada :</b> {opened_at}<br>
-                        <b>Ditutup pada :</b> {closed_at}<br>
+                         
                     </div>
                     """
                     
