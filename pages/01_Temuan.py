@@ -29,7 +29,7 @@ def render_wordcloud_interactive(frequency_dict, color_scheme='blue', title=""):
         wordcloud = WordCloud(
             width=800,
             height=400,
-            background_color=None,
+            background_color="white",
             mode='RGB',                # ✅ NO opacity
             color_func=lambda *args, **kwargs: color,  # ✅ flat color
             relative_scaling=0.5,
