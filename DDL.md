@@ -10,6 +10,15 @@ CREATE TABLE public.dim_close_date (
   minutes integer,
   day_name text
 );
+CREATE TABLE public.dim_close_date_dup (
+  day double precision,
+  month double precision,
+  year double precision,
+  hours double precision,
+  kode_temuan text NOT NULL,
+  minutes double precision,
+  day_name text
+);
 CREATE TABLE public.dim_create_date (
   day integer,
   month integer,
@@ -17,6 +26,15 @@ CREATE TABLE public.dim_create_date (
   hours integer,
   minutes integer,
   create_date_sk integer NOT NULL DEFAULT nextval('dim_create_date_create_date_sk_seq'::regclass),
+  day_name text
+);
+CREATE TABLE public.dim_create_date_dup (
+  day integer,
+  month integer,
+  year integer,
+  hours integer,
+  minutes integer,
+  kode_temuan text NOT NULL,
   day_name text
 );
 CREATE TABLE public.dim_creator (
@@ -43,6 +61,15 @@ CREATE TABLE public.dim_open_date (
   minutes integer,
   day_name text
 );
+CREATE TABLE public.dim_open_date_dup (
+  day double precision,
+  month double precision,
+  year double precision,
+  hours double precision,
+  kode_temuan text NOT NULL,
+  minutes double precision,
+  day_name text
+);
 CREATE TABLE public.dim_pic (
   pic_id character varying,
   pic_name character varying,
@@ -59,6 +86,15 @@ CREATE TABLE public.dim_target_date (
   minutes integer,
   day_name text,
   CONSTRAINT dim_target_date_pkey PRIMARY KEY (target_date_sk)
+);
+CREATE TABLE public.dim_target_date_dup (
+  day double precision,
+  month double precision,
+  year double precision,
+  hours double precision,
+  kode_temuan text NOT NULL,
+  minutes double precision,
+  day_name text
 );
 CREATE TABLE public.dim_tempat (
   nama_lokasi text,
@@ -88,6 +124,15 @@ CREATE TABLE public.dim_update_date (
   hours integer,
   minutes integer,
   update_date_sk integer NOT NULL DEFAULT nextval('dim_update_date_update_date_sk_seq'::regclass),
+  day_name text
+);
+CREATE TABLE public.dim_update_date_dup (
+  day double precision,
+  month double precision,
+  year double precision,
+  hours double precision,
+  kode_temuan text NOT NULL,
+  minutes double precision,
   day_name text
 );
 CREATE TABLE public.fact_k3 (

@@ -156,12 +156,30 @@ with tab_dept:
                 fig_header = go.Figure()
                 fig_header.add_trace(go.Scatter(x=[0], y=[0], mode='markers', marker=dict(opacity=0)))
                 fig_header.update_layout(
-                    xaxis=dict(range=[0, x_max], side="top", color="#00526A", showgrid=False),
+                    xaxis=dict(
+                        range=[0, x_max],
+                        side="top",
+                        color="#00526A",
+                        showgrid=False
+                    ),
                     yaxis=dict(visible=False),
-                    height=25,
-                    margin=dict(l=180, r=60, t=25, b=0),
+                    height=45,
+                    margin=dict(l=180, r=60, t=35, b=0),
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(0,0,0,0)",
+                    annotations=[
+                        dict(
+                            x=0.5,
+                            y=1.35,
+                            xref="paper",
+                            yref="paper",
+                            text="<b>Total Pelaporan</b>",
+                            showarrow=False,
+                            font=dict(color="#00526A", size=12),
+                            xanchor="center",
+                            yanchor="bottom"
+                        )
+                    ],
                     showlegend=False
                 )
                 st.plotly_chart(fig_header, use_container_width=True, config={'displayModeBar': False})

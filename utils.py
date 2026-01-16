@@ -59,41 +59,85 @@ def load_data():
             
             -- Create Date (tanggal pembuatan)
             CASE WHEN dd_create."year" IS NOT NULL 
-                 THEN MAKE_TIMESTAMP(dd_create."year", dd_create."month", dd_create."day", dd_create.hours, dd_create.minutes, 0.0)
+                 THEN MAKE_TIMESTAMP(
+                    CAST(dd_create."year" AS int),
+                    CAST(dd_create."month" AS int),
+                    CAST(dd_create."day" AS int),
+                    CAST(dd_create.hours AS int),
+                    CAST(dd_create.minutes AS int),
+                    0.0
+                 )
                  ELSE NULL 
             END AS tanggal,
             dd_create.day_name AS create_day_name,
             
             -- SLA Deadline (+7 Days from Create Date)
             CASE WHEN dd_create."year" IS NOT NULL 
-                 THEN (MAKE_TIMESTAMP(dd_create."year", dd_create."month", dd_create."day", dd_create.hours, dd_create.minutes, 0.0) + INTERVAL '7 days')
+                 THEN (
+                    MAKE_TIMESTAMP(
+                        CAST(dd_create."year" AS int),
+                        CAST(dd_create."month" AS int),
+                        CAST(dd_create."day" AS int),
+                        CAST(dd_create.hours AS int),
+                        CAST(dd_create.minutes AS int),
+                        0.0
+                    ) + INTERVAL '7 days'
+                 )
                  ELSE NULL 
             END AS deadline_sla,
             
             -- Close Date (tanggal penutupan)
             CASE WHEN dd_close."year" IS NOT NULL 
-                 THEN MAKE_TIMESTAMP(dd_close."year", dd_close."month", dd_close."day", dd_close.hours, dd_close.minutes, 0.0)
+                 THEN MAKE_TIMESTAMP(
+                    CAST(dd_close."year" AS int),
+                    CAST(dd_close."month" AS int),
+                    CAST(dd_close."day" AS int),
+                    CAST(dd_close.hours AS int),
+                    CAST(dd_close.minutes AS int),
+                    0.0
+                 )
                  ELSE NULL 
             END AS close_at,
             dd_close.day_name AS close_day_name,
             
             -- Open Date (tanggal dibuka)
             CASE WHEN dd_open."year" IS NOT NULL 
-                 THEN MAKE_TIMESTAMP(dd_open."year", dd_open."month", dd_open."day", dd_open.hours, dd_open.minutes, 0.0)
+                 THEN MAKE_TIMESTAMP(
+                    CAST(dd_open."year" AS int),
+                    CAST(dd_open."month" AS int),
+                    CAST(dd_open."day" AS int),
+                    CAST(dd_open.hours AS int),
+                    CAST(dd_open.minutes AS int),
+                    0.0
+                 )
                  ELSE NULL 
             END AS open_at,
             dd_open.day_name AS open_day_name,
             
             -- Update Date (tanggal update terakhir)
             CASE WHEN dd_update."year" IS NOT NULL 
-                 THEN MAKE_TIMESTAMP(dd_update."year", dd_update."month", dd_update."day", dd_update.hours, dd_update.minutes, 0.0)
+                 THEN MAKE_TIMESTAMP(
+                    CAST(dd_update."year" AS int),
+                    CAST(dd_update."month" AS int),
+                    CAST(dd_update."day" AS int),
+                    CAST(dd_update.hours AS int),
+                    CAST(dd_update.minutes AS int),
+                    0.0
+                 )
                  ELSE NULL 
             END AS update_at,
             dd_update.day_name AS update_day_name,
             
             -- Target Date (tanggal target penyelesaian)
             CASE WHEN dd_target."year" IS NOT NULL 
-                 THEN MAKE_TIMESTAMP(dd_target."year", dd_target."month", dd_target."day", dd_target.hours, dd_target.minutes, 0.0)
+                 THEN MAKE_TIMESTAMP(
+                    CAST(dd_target."year" AS int),
+                    CAST(dd_target."month" AS int),
+                    CAST(dd_target."day" AS int),
+                    CAST(dd_target.hours AS int),
+                    CAST(dd_target.minutes AS int),
+                    0.0
+                 )
                  ELSE NULL 
             END AS target_at,
             dd_target.day_name AS target_day_name,
@@ -160,24 +204,24 @@ def load_data():
             ON UPPER(f.tempat_id) = UPPER(loc.nama_lokasi)
         
         -- Create Date Dimension
-        LEFT JOIN public.dim_create_date dd_create 
-            ON f.create_date_sk = dd_create.create_date_sk
+        LEFT JOIN public.dim_create_date_dup dd_create 
+            ON f.kode_temuan = dd_create.kode_temuan
         
         -- Close Date Dimension
-        LEFT JOIN public.dim_close_date dd_close 
-            ON f.close_date_sk = dd_close.close_date_sk
+        LEFT JOIN public.dim_close_date_dup dd_close 
+            ON f.kode_temuan = dd_close.kode_temuan
         
         -- Open Date Dimension
-        LEFT JOIN public.dim_open_date dd_open 
-            ON f.open_date_sk = dd_open.open_date_sk
+        LEFT JOIN public.dim_open_date_dup dd_open 
+            ON f.kode_temuan = dd_open.kode_temuan
         
         -- Update Date Dimension
-        LEFT JOIN public.dim_update_date dd_update 
-            ON f.update_date_sk = dd_update.update_date_sk
+        LEFT JOIN public.dim_update_date_dup dd_update 
+            ON f.kode_temuan = dd_update.kode_temuan
         
         -- Target Date Dimension
-        LEFT JOIN public.dim_target_date dd_target 
-            ON f.target_date_sk = dd_target.target_date_sk
+        LEFT JOIN public.dim_target_date_dup dd_target 
+            ON f.kode_temuan = dd_target.kode_temuan
         """
         
         # Execute query using raw DBAPI connection for pandas compatibility

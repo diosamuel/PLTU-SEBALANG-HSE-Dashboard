@@ -61,7 +61,7 @@ else:
     open_findings = 0
     butuh_verifikasi = 0
 if total_findings > 0:
-    closing_rate = ((closed_findings+butuh_verifikasi) / total_findings) * 100
+    closing_rate = ((closed_findings) / total_findings) * 100
 else:
     closing_rate = 0.0
 

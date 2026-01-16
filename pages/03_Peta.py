@@ -72,7 +72,6 @@ with col_map:
                         'Near Miss': 'rgba(26, 35, 126, 0.15)'         # Light indigo
                     }
                     return light_colors.get(category, 'rgba(255, 255, 255, 0.9)')
-                
                 for _, row in df_pins.iterrows():
                     kode_temuan = row.get('kode_temuan', '-')
                     kategori = row.get('temuan_kategori', '-')
@@ -85,7 +84,6 @@ with col_map:
                     opened_at = row.get('open_at', '-')
                     closed_at = row.get('close_at', '-') 
 
-                    print(row)
                     # Get background color based on category
                     bg_color = get_light_bg_color(kategori)
                     
