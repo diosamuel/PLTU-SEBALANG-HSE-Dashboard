@@ -102,7 +102,7 @@ with c3:
 with c4:
     st.markdown(f"""
     <div class="metric-card">
-        <h3>Temuan Near Miss</h3>
+        <h3>Temuan Near Miss Terbuka</h3>
         <h1 style="color: #FF4B4B;">{pending_near_miss}</h1>
         <!--<p style="color:grey; font-size:0.8rem;">Temuan 'Near Miss' Open</p>-->
     </div>

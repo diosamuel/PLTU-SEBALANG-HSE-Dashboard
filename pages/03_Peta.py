@@ -91,14 +91,16 @@ with col_map:
                     <div style="font-family: 'Source Sans Pro', sans-serif; color: #00526A; min-width: 200px; 
                                 background-color: {bg_color}; padding: 10px; border-radius: 8px;">
                         <b style="font-size: 14px;">{kategori}</b><hr style="margin: 5px 0;">
-                        <b>Status :</b> {status}<br>
                         <b>Kode Temuan:</b> {kode_temuan}<br>
-                        <b>Temuan:</b> {temuan_nama}<br>
+                        <b>Status :</b> {status}<br>
                         <b>Judul:</b> {judul}<br>
+                        <b>Temuan:</b> {temuan_nama}<br>
+                        <hr/>
                         <b>Kondisi:</b> {kondisi}<br>
                         <b>Rekomendasi:</b> {rekomendasi}<br>
                         <b>Lokasi :</b> {location}<br>
-                         
+                        <b>Dibuka pada :</b> {opened_at}<br>
+                        <!--<b>Ditutup pada :</b> {closed_at}<br>-->
                     </div>
                     """
                     
