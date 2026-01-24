@@ -6,16 +6,30 @@ from folium.plugins import MarkerCluster, HeatMap
 from utils import load_data, render_sidebar, set_header_title, HSE_COLOR_MAP
 from branca.element import Template, MacroElement
 
-# Page Config
-st.set_page_config(page_title="Peta Risiko & Analisis Spasial", layout="wide")
+def get_color(category):
+    cat_lower = str(category).lower()
+    if 'near miss' in cat_lower: return 'darkblue'      # #1A237E -> darkblue
+    if 'unsafe condition' in cat_lower: return 'orange' # #F57F17 -> orange
+    if 'unsafe action' in cat_lower: return 'red'       # #B71C1C -> red/darkred
+    if 'positive' in cat_lower: return 'darkgreen'      # #1B5E20 -> darkgreen
+    return 'cadetblue'
 
-# Data Loading
+def get_light_bg_color(category):
+    """Get lighter background color based on HSE category"""
+    # Light versions of HSE_COLOR_MAP colors (with transparency)
+    light_colors = {
+        'Positive': 'rgba(27, 94, 32, 0.15)',           # Light green
+        'Unsafe Action': 'rgba(183, 28, 28, 0.15)',    # Light red
+        'Unsafe Condition': 'rgba(245, 127, 23, 0.15)', # Light amber
+        'Near Miss': 'rgba(26, 35, 126, 0.15)'         # Light indigo
+    }
+    return light_colors.get(category, 'rgba(255, 255, 255, 0.9)')
+st.set_page_config(page_title="Peta Risiko & Analisis Spasial", layout="wide")
 df_exploded, df_master, df_map = load_data()
 df_master_filtered, _, _ = render_sidebar(df_master, df_exploded)
 set_header_title("Analisis Risiko Spasial")
 
 col_map, col_details = st.columns([3, 1])
-
 with col_map:
     if 'lat' in df_master_filtered.columns and 'lon' in df_master_filtered.columns:
         df_geo = df_master_filtered.dropna(subset=['lat', 'lon'])
@@ -24,43 +38,18 @@ with col_map:
             center_lat = -5.585357333271365
             center_lon = 105.38785245329919
             
-            # --- Marker Data: Now includes ALL findings (Removed 'Open' filter) ---
             df_pins = df_geo.copy() 
-
-            map_key = f"map_data_{len(df_geo)}" # Updated key for session state
-            
+            map_key = f"map_data_{len(df_geo)}"
             if map_key not in st.session_state:
                 m = folium.Map(location=[center_lat, center_lon], zoom_start=17)
                 
-                # Satellite Layer (Stadia Maps with API key)
                 folium.TileLayer(
                     tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg?api_key=0956e908-f9e5-41a5-9d89-f01b65803cc9',
                     attr='&copy; Stadia Maps', name='Stadia Satellite'
                 ).add_to(m)
                 heat_data = [[row['lat'], row['lon']] for index, row in df_geo.iterrows()]
                 HeatMap(heat_data, radius=18, blur=12, name='Heatmap Temuan').add_to(m)
-                
-                # Marker Cluster for clickability
                 marker_cluster = MarkerCluster(name='Semua Temuan').add_to(m)
-                
-                def get_color(category):
-                    cat_lower = str(category).lower()
-                    if 'near miss' in cat_lower: return 'darkblue'      # #1A237E -> darkblue
-                    if 'unsafe condition' in cat_lower: return 'orange' # #F57F17 -> orange
-                    if 'unsafe action' in cat_lower: return 'red'       # #B71C1C -> red/darkred
-                    if 'positive' in cat_lower: return 'darkgreen'      # #1B5E20 -> darkgreen
-                    return 'cadetblue'
-                
-                def get_light_bg_color(category):
-                    """Get lighter background color based on HSE category"""
-                    # Light versions of HSE_COLOR_MAP colors (with transparency)
-                    light_colors = {
-                        'Positive': 'rgba(27, 94, 32, 0.15)',           # Light green
-                        'Unsafe Action': 'rgba(183, 28, 28, 0.15)',    # Light red
-                        'Unsafe Condition': 'rgba(245, 127, 23, 0.15)', # Light amber
-                        'Near Miss': 'rgba(26, 35, 126, 0.15)'         # Light indigo
-                    }
-                    return light_colors.get(category, 'rgba(255, 255, 255, 0.9)')
                 for _, row in df_pins.iterrows():
                     kode_temuan = row.get('kode_temuan', '-')
                     kategori = row.get('temuan_kategori', '-')
@@ -72,8 +61,6 @@ with col_map:
                     status = row.get('temuan_status', 'Unknown')
                     opened_at = row.get('open_at', '-')
                     closed_at = row.get('close_at', '-') 
-
-                    # Get background color based on category
                     bg_color = get_light_bg_color(kategori)
                     
                     popup_html = f"""
@@ -99,9 +86,7 @@ with col_map:
                             popup=folium.Popup(popup_html, max_width=300),
                             icon=folium.Icon(color=get_color(kategori), icon='info-sign')
                         ).add_to(marker_cluster)
-                    # else:
-                        # st.write(row)
-
+                        
                 legend_template = f"""
                 {{% macro html(this, kwargs) %}}
                 <div id='maplegend' class='maplegend' 

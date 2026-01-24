@@ -8,9 +8,8 @@ from utils import load_data, render_sidebar, set_header_title, HSE_COLOR_MAP
 import folium
 from folium.plugins import MarkerCluster
 import streamlit.components.v1 as components
-# Page Config
+
 st.set_page_config(page_title="Kinerja Personil", page_icon=None, layout="wide")
-# Data
 df_exploded, df_master, _ = load_data()
 df_master_filtered, _ = render_sidebar(df_master, df_exploded)[:2]
 set_header_title("Analisis Kinerja Personil")
@@ -47,7 +46,6 @@ with c2:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # --- Tabs for Analysis ---
-# --- C. Data Processing for Tabs ---
 dept_col = 'creator_departemen' if 'creator_departemen' in df_master_filtered.columns else None
 df_dept = pd.DataFrame()
 
@@ -464,7 +462,6 @@ with tab_personnel:
         
         for i, row in top_reporters.iterrows():
             short_name = str(row['Reporter']).split()[0] + "..." if len(str(row['Reporter']).split()) > 1 else row['Reporter']
-            # Dynamic label color: Light if high Total Tutup (dark bubble), Dark if low
             intensity = row['Total Tutup'] / max_closed if max_closed > 0 else 0
             label_color = "black" if intensity > 0.5 else "#00526A"
             
