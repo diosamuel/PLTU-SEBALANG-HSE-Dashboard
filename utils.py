@@ -262,7 +262,7 @@ def render_sidebar(df_master, df_exploded):
     load_css()
     
     # Reverted to Wikimedia Logo as requested
-    st.sidebar.image("https://kehatitenayan.web.id/static/media/PLN-NP.a8c9cf3c76844681aca8.png", width=200)        
+    st.sidebar.image("./asset/logo-pln.png", width=200)        
     st.sidebar.title("Filter")
 
     # Date Filter
@@ -315,16 +315,12 @@ def render_sidebar(df_master, df_exploded):
         if sel_locs and 'All' not in sel_locs:
             df_master_filtered = df_master_filtered[df_master_filtered['nama_lokasi'].isin(sel_locs)]
 
-    # Existing Department Filter (Combined with above logic flow)
     if 'creator_departemen' in df_master.columns:
-        # Use filtered values or original? Usually dependent filters are better.
         depts = ['All'] + sorted(df_master_filtered['creator_departemen'].dropna().astype(str).unique().tolist())
-        # Use index=0 (All)
         selected_dept = st.sidebar.selectbox("Department", depts)
         if selected_dept != 'All':
             df_master_filtered = df_master_filtered[df_master_filtered['creator_departemen'] == selected_dept]
 
-    # Sync Exploded DF with filtered Master IDs
     if not df_master_filtered.empty:
         valid_ids = df_master_filtered['kode_temuan'].unique()
         df_exploded_filtered = df_exploded[df_exploded['kode_temuan'].isin(valid_ids)]

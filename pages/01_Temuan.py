@@ -285,7 +285,7 @@ with analisisKondisi:
 with alurKategori:
     if not df_exploded_filtered.empty:
         # Flow: temuan_kategori -> temuan_nama_spesifik -> nama_lokasi
-        cols = ['temuan_kategori', 'temuan_nama', 'nama_lokasi']
+        cols = ['temuan_kategori', 'temuan_nama_spesifik', 'nama_lokasi']
         cols = [c for c in cols if c in df_exploded_filtered.columns]
         
         # Limit Control

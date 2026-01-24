@@ -8,7 +8,15 @@ import folium
 from streamlit_folium import st_folium
 from folium.plugins import HeatMap
 from utils import render_sidebar, set_header_title
+import streamlit.components.v1 as components
+from plotly.subplots import make_subplots
+from branca.element import MacroElement, Template
 
+def truncate_label(text, limit=12):
+    text = str(text)
+    if len(text) > limit:
+        return text[:limit] + "..."
+    return text
 st.set_page_config(
     page_title="DASHBOARD ANALISIS IZAT PLN NP UP SEBALANG",
     page_icon=None,
@@ -63,7 +71,6 @@ with c1:
     <div class="metric-card">
         <h3>Total Temuan</h3>
         <h1>{total_findings}</h1>
-         <!--<p style="color:grey; font-size:0.8rem;">Jumlah unik 'kode_temuan'.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -80,7 +87,6 @@ with c3:
     <div class="metric-card">
         <h3>Closing Rate</h3>
         <h1>{closing_rate:.1f}%</h1>
-        <!--<p style="color:grey; font-size:0.8rem;">(Selesai / Total) * 100.</p>-->
     </div>
     """, unsafe_allow_html=True)
 
@@ -89,12 +95,8 @@ with c4:
     <div class="metric-card">
         <h3>Temuan Near Miss Terbuka</h3>
         <h1 style="color: #FF4B4B;">{pending_near_miss}</h1>
-        <!--<p style="color:grey; font-size:0.8rem;">Temuan 'Near Miss' Open</p>-->
     </div>
     """, unsafe_allow_html=True)
-
-
-
 # --- 7. Charts (Row 1) ---
 col_left, col_right = st.columns([2, 1])
 
@@ -172,16 +174,12 @@ with col_right:
         st.subheader("Distribusi Risiko")
         st.caption("Rincian temuan berdasarkan Kategori Risiko.")
         if 'temuan_kategori' in df_master_filtered.columns:
-            # Filter out None, NaN, and empty values
             kategori_clean = df_master_filtered['temuan_kategori'].dropna()
             kategori_clean = kategori_clean[kategori_clean.astype(str).str.strip() != '']
             kategori_clean = kategori_clean[kategori_clean.astype(str).str.lower() != 'none']
             
             df_risk = kategori_clean.value_counts().reset_index()
             df_risk.columns = ['Category', 'Count']
-            
-            # Define colors
-            
             fig_pie = px.pie(df_risk, values='Count', names='Category', 
                             color='Category', color_discrete_map=HSE_COLOR_MAP, hole=0.4,
                             title=" ")
@@ -189,11 +187,10 @@ with col_right:
             fig_pie.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                   font=dict(color="#00526A"), 
                                   title=dict(font=dict(color="#00526A")),
-                                  height=300, # Compact Height
+                                  height=300,
                                   margin=dict(l=0, r=0, t=30, b=20))
             st.plotly_chart(fig_pie, use_container_width=True)
 
-# --- 8. Charts (Row 2: Top Issues) ---
 # --- 8. Charts (Row 2: Top Issues) ---
 if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' in df_exploded_filtered.columns:
     
@@ -211,14 +208,8 @@ if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' 
         # Group by Object AND Category to show category context
             top_objects = df_exploded_filtered.groupby(['temuan_nama_spesifik', 'temuan_kategori']).size().reset_index(name='Count')
             top_objects.columns = ['Object', 'Category', 'Count']
-            
-            # Calculate TOTAL counts per Object for Sorting and Top 10 logic
             object_totals = top_objects.groupby('Object')['Count'].sum().reset_index().sort_values('Count', ascending=False)
             sorted_objects = object_totals['Object'].tolist()
-            
-            # Define colors (Same as Risk Distribution)
-            color_map = HSE_COLOR_MAP
-            
             # Filter limit
             limit_mode = st.radio("Tampilkan:", ["Top 10", "Semua"], horizontal=True, key="bar_limit", label_visibility="collapsed")
             if limit_mode == "Top 10":
@@ -227,9 +218,8 @@ if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' 
             else:
                 top_objects_plot = top_objects.copy()
 
-            # Custom Legend (Moved below switch)
             legend_html = "<div style='display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; margin-top: 5px;'>"
-            for cat, color in color_map.items():
+            for cat, color in HSE_COLOR_MAP.items():
                 legend_html += f"<div style='display: flex; align-items: center;'><span style='width: 12px; height: 12px; background-color: {color}; display: inline-block; margin-right: 5px; border-radius: 2px;'></span><span style='font-size: 12px; color: #00526A;'>{cat}</span></div>"
             legend_html += "</div>"
             st.markdown(legend_html, unsafe_allow_html=True)
@@ -239,8 +229,6 @@ if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' 
             if pd.isna(max_val): max_val = 10 
             # Add some padding
             range_x = [0, max_val * 1.1]
-
-            # Recalculate sort order specifically for the plotted data to ensure consistency
             # Group by Object, Sum Count, Sort Descending (Highest at Top visually if reversed)
             plot_totals = top_objects_plot.groupby('Object')['Count'].sum().sort_values(ascending=False)
             sorted_plot_objects = plot_totals.index.tolist()
@@ -270,30 +258,15 @@ if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' 
             )
             st.plotly_chart(fig_header, use_container_width=True, config={'displayModeBar': False})
 
-
             # --- 2. Scrollable Body (Bars) ---
-            # Truncate Labels for display
-            # Truncate Labels for display
-            # Guard: Max 14 chars only
-            def truncate_label(text, limit=12):
-                text = str(text)
-                if len(text) > limit:
-                    return text[:limit] + "..."
-                return text
-            
-            # Use .loc to avoid SettingWithCopyWarning if it's a slice
             top_objects_plot = top_objects_plot.copy()
             top_objects_plot['DisplayObject'] = top_objects_plot['Object'].apply(lambda x: truncate_label(str(x)))
 
             fig_bar = px.bar(top_objects_plot, x='Count', y='DisplayObject', orientation='h',
                             color='Category', 
                             text='Count', 
-                            color_discrete_map=color_map, 
+                            color_discrete_map=HSE_COLOR_MAP, 
                             height=dynamic_height,
-                            # Sort matches descending using original object names via custom order mapping if needed
-                            # But since we changed Y to DisplayObject, we need to sort DisplayObject
-                            # To keep correct order, we set category_orders on DisplayObject based on the sorted original Objects
-                            # We map sorted_plot_objects (full names) to truncated names
                             category_orders={'DisplayObject': [truncate_label(x) for x in sorted_plot_objects]},
                             hover_data={'Object': True, 'DisplayObject': False}, # Show Full Name on Hover
                             title=None) # Remove Title
@@ -308,57 +281,42 @@ if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' 
                 yaxis=dict(
                     autorange="reversed", 
                     color="#00526A",
-                    title=None, # Remove Y-Axis Title ("DisplayObject")
+                    title=None,
                     categoryorder='array', 
                     categoryarray=[truncate_label(x) for x in sorted_plot_objects]
-                    # automargin=True # Cannot use automargin with split charts, must use fixed
                 ),
                 xaxis=dict(
                     range=range_x,
                     visible=True, 
-                    showticklabels=False, # Hide labels, kept grid if desired, or hide all
+                    showticklabels=False,
                     showgrid=True,
                     gridcolor='rgba(0,0,0,0.1)'
                 ),
                 font=dict(color="#00526A"),
-                margin=dict(l=100, r=0, t=0, b=0), # Adjusted margin matching header
+                margin=dict(l=100, r=0, t=0, b=0),
                 title=None,
                 showlegend=False
             )
             
-            # Convert to HTML for robust scrolling
-            import streamlit.components.v1 as components
             chart_html = fig_bar.to_html(include_plotlyjs='cdn', full_html=False, config={'displayModeBar': False})
-            
-            # Embed with scrolling enabled
-            # Decrease height of window slightly if needed, or keep 400
-            # Embed with scrolling enabled
             components.html(chart_html, height=280, scrolling=True)
             
     with col_line:
-        # Stacked Bar + Line Chart for Trend Analysis
-        
-        # Get Top 5 Object Names for default selection
         top_5_names = top_objects.groupby('Object')['Count'].sum().nlargest(5).index.tolist()
         all_object_names = top_objects['Object'].unique().tolist()
-        
-        # Multiselect Filter
         selected_trend_objects = st.multiselect(
             "Pilih Objek untuk Difilter:",
             options=all_object_names,
             default=top_5_names,
             label_visibility="collapsed"
         )
-        
-        # Filter Data based on Selection
         if 'tanggal' in df_exploded_filtered.columns:
             if selected_trend_objects:
                 df_trend_filtered = df_exploded_filtered[df_exploded_filtered['temuan_nama_spesifik'].isin(selected_trend_objects)].copy()
             else:
-                df_trend_filtered = pd.DataFrame() # Empty if nothing selected
+                df_trend_filtered = pd.DataFrame()
             
             if not df_trend_filtered.empty:
-                # Determine frequency based on granularity
                 freq_alias = 'W' if granularity == 'Mingguan' else 'M'
                 
                 # Resample by Period and Object
@@ -392,7 +350,6 @@ if 'temuan_nama_spesifik' in df_exploded_filtered.columns and 'temuan_kategori' 
                 df_total.columns = ['Period', 'Total']
                 
                 # Create figure with bars and line
-                from plotly.subplots import make_subplots
                 fig_combo = go.Figure()
                 
                 # Add stacked bars for each object
@@ -469,23 +426,18 @@ else:
     st.info("Column 'temuan_nama_spesifik' not found for object analysis.")
 
 # --- 8. Near Miss Table & Heatmap (Combined) ---
-st.markdown("<div style='margin-top: -30px;'></div>", unsafe_allow_html=True) # Pull up Row 3
+st.markdown("<div style='margin-top: -30px;'></div>", unsafe_allow_html=True)
 col_nm, col_map = st.columns([1, 1])
 
 with col_nm:
-    st.subheader("Temuan Near Miss ")
+    st.subheader("Temuan Near Miss")
     high_risk_df = df_master_filtered[df_master_filtered['temuan_kategori'] == 'Near Miss']
 
     # st.write(df_master_filtered)
     if not high_risk_df.empty:
-        cols_to_show = ['kode_temuan', 'tanggal', 'temuan_nama_spesifik', 'nama_lokasi', 'temuan_status']
-        # Filter valid columns
-        valid_cols = [c for c in cols_to_show if c in high_risk_df.columns]
-        
-        # Create display dataframe with renamed columns
-        df_display = high_risk_df[valid_cols].head(20).copy()
-        
-        # Rename columns to readable Indonesian names
+        # cols_to_show = ['kode_temuan', 'tanggal', 'temuan_nama_spesifik', 'nama_lokasi', 'temuan_status']
+        # valid_cols = [c for c in cols_to_show if c in high_risk_df.columns]
+
         column_rename_map = {
             'kode_temuan': 'Kode Temuan',
             'tanggal': 'Tanggal',
@@ -493,7 +445,7 @@ with col_nm:
             'nama_lokasi': 'Lokasi',
             'temuan_status': 'Status'
         }
-        df_display = df_display.rename(columns=column_rename_map)
+        df_display = high_risk_df.head(20).copy().rename(columns=column_rename_map)
         
         st.dataframe(
             df_display,
@@ -507,7 +459,6 @@ with col_nm:
 with col_map:
     st.subheader("Peta Sebaran Temuan")
     st.caption("Intensitas sebaran temuan.")
-    # st.caption("Intensity of findings based on location frequency.")
     
     if 'lat' in df_master_filtered.columns and 'lon' in df_master_filtered.columns:
         df_geo_home = df_master_filtered.dropna(subset=['lat', 'lon'])
@@ -547,15 +498,12 @@ with col_map:
                 </div>
                 {% endmacro %}
                 '''
-                from branca.element import MacroElement, Template
                 macro = MacroElement()
                 macro._template = Template(legend_html)
                 m_home.get_root().add_child(macro)
                 
                 st.session_state[map_key] = m_home
             
-            # Display Map using session state object
-            # Height 280 to match table
             st_folium(st.session_state[map_key], height=280, width="100%", returned_objects=[])
         else:
             st.info("Data spasial tidak tersedia untuk heatmap.")

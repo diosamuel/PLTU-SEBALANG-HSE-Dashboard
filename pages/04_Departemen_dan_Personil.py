@@ -5,20 +5,15 @@ import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
 from utils import load_data, render_sidebar, set_header_title, HSE_COLOR_MAP
-
-# Page Config
+import folium
+from folium.plugins import MarkerCluster
+import streamlit.components.v1 as components
 # Page Config
 st.set_page_config(page_title="Kinerja Personil", page_icon=None, layout="wide")
-
-# Loaded via utils.render_sidebar()
-
 # Data
 df_exploded, df_master, _ = load_data()
 df_master_filtered, _ = render_sidebar(df_master, df_exploded)[:2]
 set_header_title("Analisis Kinerja Personil")
-
-
-
 # --- A. KPI Row ---
 # KPI Logic
 unique_reporters = df_master_filtered['creator_name'].nunique() if 'creator_name' in df_master_filtered.columns else 0
@@ -26,8 +21,6 @@ unique_reporters = df_master_filtered['creator_name'].nunique() if 'creator_name
 max_workload = 0
 top_pic = "-"
 if 'creator_name' in df_master_filtered.columns:
-    # Workload by Reporter (creator_name) instead of Dept (nama) for consistency?
-    # Or sticking to original logic? User asked for "Personnel" page, so creator_name makes more sense.
     pic_open_counts = df_master_filtered[df_master_filtered['temuan_status'] == 'Open']['creator_name'].value_counts()
     if not pic_open_counts.empty:
         max_workload = pic_open_counts.iloc[0]
@@ -207,7 +200,6 @@ with tab_dept:
                     margin=dict(l=180, r=60, t=0, b=10)  # Reduced top margin
                 )
                 
-                import streamlit.components.v1 as components
                 chart_html = fig_dept.to_html(include_plotlyjs='cdn', full_html=False, config={'displayModeBar': False})
                 components.html(chart_html, height=250, scrolling=True)
             else:
@@ -328,7 +320,6 @@ with tab_dept:
                     coloraxis_showscale=False
                 )
                 
-                import streamlit.components.v1 as components
                 html_code = fig_matrix.to_html(include_plotlyjs='cdn', full_html=False, config={'displayModeBar': False})
                 components.html(html_code, height=250, scrolling=True)
             
@@ -461,24 +452,18 @@ with tab_personnel:
         
         fig_scatter = px.scatter(df_perf, x='Total Temuan', y='Total Tutup', 
                                  hover_data=hover_cols,
-                                 # text='Reporter', # Removed to prevent clutter
                                  size='Total Temuan', 
                                  size_max=40, # Make bubbles slightly larger
                                  color='Total Tutup',
                                  color_continuous_scale='Teal',
                                  title="<br>")
         
-        # fig_scatter.update_traces(textposition='top center') # Removed
         fig_scatter.update_traces(marker=dict(opacity=0.7, line=dict(width=1, color='DarkSlateGrey')))
-        
-        # Add labels only for Top 10 busiest (by Total Temuan)
         top_reporters = df_perf.nlargest(10, 'Total Temuan')
         max_closed = df_perf['Total Tutup'].max() if not df_perf.empty else 1
         
         for i, row in top_reporters.iterrows():
-            # Truncate name to first word + "..."
             short_name = str(row['Reporter']).split()[0] + "..." if len(str(row['Reporter']).split()) > 1 else row['Reporter']
-            
             # Dynamic label color: Light if high Total Tutup (dark bubble), Dark if low
             intensity = row['Total Tutup'] / max_closed if max_closed > 0 else 0
             label_color = "black" if intensity > 0.5 else "#00526A"
@@ -665,9 +650,7 @@ with tab_personnel:
             df_geo = df_reported_by.dropna(subset=['lat', 'lon'])
             
             if not df_geo.empty:
-                
-                import folium
-                from folium.plugins import MarkerCluster
+
                 
                 # Fixed center (PLTU Sebalang location)
                 center_lat = -5.585357333271365

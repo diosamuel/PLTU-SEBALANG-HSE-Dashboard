@@ -93,14 +93,15 @@ with col_map:
                     </div>
                     """
                     
-                    folium.Marker(
-                        location=[row['lat'], row['lon']],
-                        popup=folium.Popup(popup_html, max_width=300),
-                        icon=folium.Icon(color=get_color(kategori), icon='info-sign')
-                    ).add_to(marker_cluster)
-                
-                # --- ADD LEGEND (MacroElement) ---
-                
+                    if row['lat'] != 0 and row['lon'] != 0:
+                        folium.Marker(
+                            location=[row['lat'], row['lon']],
+                            popup=folium.Popup(popup_html, max_width=300),
+                            icon=folium.Icon(color=get_color(kategori), icon='info-sign')
+                        ).add_to(marker_cluster)
+                    # else:
+                        # st.write(row)
+
                 legend_template = f"""
                 {{% macro html(this, kwargs) %}}
                 <div id='maplegend' class='maplegend' 
@@ -133,7 +134,9 @@ with col_map:
         st.warning("Field data spasial (lat/lon) hilang.")
 
 with col_details:
-    st.markdown("### Lokasi Temuan Teratas")
+    st.markdown("### 20 Lokasi Temuan Teratas")
     if 'nama_lokasi' in df_master_filtered.columns:
         top_locs = df_master_filtered.groupby('nama_lokasi')['kode_temuan'].nunique().sort_values(ascending=False).head(20).reset_index(name='Total')
         st.dataframe(top_locs, hide_index=True, use_container_width=True)
+        no_locs = df_master_filtered[df_master_filtered['lat']==0].groupby('nama_lokasi')['kode_temuan'].nunique().sort_values(ascending=False).reset_index(name='Total')
+        st.dataframe(no_locs, hide_index=True, use_container_width=True)
