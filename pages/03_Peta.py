@@ -4,6 +4,7 @@ import folium
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster, HeatMap
 from utils import load_data, render_sidebar, set_header_title, HSE_COLOR_MAP
+from branca.element import Template, MacroElement
 
 # Page Config
 st.set_page_config(page_title="Peta Risiko & Analisis Spasial", layout="wide")
@@ -12,8 +13,6 @@ st.set_page_config(page_title="Peta Risiko & Analisis Spasial", layout="wide")
 df_exploded, df_master, df_map = load_data()
 df_master_filtered, _, _ = render_sidebar(df_master, df_exploded)
 set_header_title("Analisis Risiko Spasial")
-
-
 
 col_map, col_details = st.columns([3, 1])
 
@@ -38,16 +37,6 @@ with col_map:
                     tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg?api_key=0956e908-f9e5-41a5-9d89-f01b65803cc9',
                     attr='&copy; Stadia Maps', name='Stadia Satellite'
                 ).add_to(m)
-                
-                # --- CATEGORY-MATCHED HEATMAP ---
-                # Gradient mapping: 0.2 (Positive), 0.4 (Action), 0.6 (Condition), 1.0 (Near Miss)
-                # custom_gradient = {
-                #     0.2: HSE_COLOR_MAP['Positive'],         # #1B5E20
-                #     0.4: HSE_COLOR_MAP['Unsafe Action'],    # #B71C1C
-                #     0.6: HSE_COLOR_MAP['Unsafe Condition'], # #F57F17
-                #     1.0: HSE_COLOR_MAP['Near Miss']         # #1A237E
-                # }
-                
                 heat_data = [[row['lat'], row['lon']] for index, row in df_geo.iterrows()]
                 HeatMap(heat_data, radius=18, blur=12, name='Heatmap Temuan').add_to(m)
                 
@@ -111,7 +100,6 @@ with col_map:
                     ).add_to(marker_cluster)
                 
                 # --- ADD LEGEND (MacroElement) ---
-                from branca.element import Template, MacroElement
                 
                 legend_template = f"""
                 {{% macro html(this, kwargs) %}}

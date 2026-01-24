@@ -4,105 +4,28 @@ import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
-from utils import load_data, render_sidebar, set_header_title, HSE_COLOR_MAP
-
-# ============================================
-# HELPER FUNCTIONS (Global)
-# ============================================
-
-def render_wordcloud_interactive(frequency_dict, color_scheme='blue', title=""):
-    if not frequency_dict:
-        st.info("Tidak ada data untuk wordcloud")
-        return
-
-    # Flat colors (NO gradient)
-    flat_colors = {
-        'blue': '#1f77b4',
-        'red': '#d62728',
-        'green': '#2ca02c',
-        'orange': '#ff7f0e',
-        'purple': '#9467bd'
-    }
-    color = flat_colors.get(color_scheme, '#1f77b4')
-
-    try:
-        wordcloud = WordCloud(
-            width=800,
-            height=400,
-            background_color="white",
-            mode='RGB',                # ✅ NO opacity
-            color_func=lambda *args, **kwargs: color,  # ✅ flat color
-            relative_scaling=0.5,
-            min_font_size=10,
-            max_font_size=100,
-            prefer_horizontal=0.7,
-            collocations=False,
-            margin=10
-        ).generate_from_frequencies(frequency_dict)
-
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.imshow(wordcloud, interpolation='bilinear')
-        ax.axis('off')
-        plt.tight_layout(pad=0)
-
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    except Exception as e:
-        st.error(f"Error generating wordcloud: {e}")
-
-def hex_to_rgba(hex_color, opacity=0.4):
-    """Convert hex color to rgba with specified opacity"""
-    hex_color = hex_color.lstrip('#')
-    if len(hex_color) == 6:
-        r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        return f"rgba({r}, {g}, {b}, {opacity})"
-    return f"rgba(0, 82, 106, {opacity})"
-
-# ============================================
-# CONSTANTS
-# ============================================
-
-# Custom color scale for charts
-CUSTOM_SCALE = [
-    [0.0, '#DCEEF3'],  # Light Blue
-    [1.0, '#00526A']   # PLN Dark Blue
-]
-
-# ============================================
-# PAGE CONFIGURATION
-# ============================================
-
+from utils import load_data, render_sidebar, set_header_title,render_wordcloud,hex_to_rgba
+from constants import HSE_COLOR_MAP, CUSTOM_SCALE
+from plotly.subplots import make_subplots
+                
 # Page Config
 st.set_page_config(page_title="Analisis Temuan", page_icon=None, layout="wide")
-
-# Data Loading
 df_exploded, df_master, _ = load_data()
 df_master_filtered, df_exploded_filtered, _ = render_sidebar(df_master, df_exploded)
+
 set_header_title("Analisis Temuan")
+analisisObjek, analisisKondisi, alurKategori = st.tabs(["Analisis Objek", "Analisis Kondisi", "Alur Kategori Temuan"])
 
-# --- Tabs for Compact Layout ---
-tab1, tab2, tab3 = st.tabs(["Analisis Objek", "Analisis Kondisi", "Alur Kategori Temuan"])
+with analisisObjek:
 
-# ============================================
-# TAB 1: OBJECT ANALYSIS (PARETO/TREEMAP)
-# ============================================
-with tab1:
-
-    # --- COMPACT CONTROLS ROW ---
-    c_drill, c_limit, c_check = st.columns([1.5, 1, 1])
-    
-    # Create parent category from first word of temuan_nama_spesifik
+    c_drill, c_limit, c_check = st.columns([1.5, 1, 1]) # 3 Columns menu
     selected_parent = "Semua"
     
     if 'temuan_nama_spesifik' in df_exploded_filtered.columns:
-        # Extract first word as parent category
         df_exploded_filtered = df_exploded_filtered.copy()
         df_exploded_filtered['temuan_parent'] = df_exploded_filtered['temuan_nama_spesifik'].apply(
             lambda x: str(x).split()[0].lower().strip() if pd.notna(x) and str(x).strip() else None
         )
-    
-    # Col 1: Drill-down by Parent (first word)
     with c_drill:
         if 'temuan_parent' in df_exploded_filtered.columns:
             # Get unique parent categories (first words), exclude None/empty
@@ -155,10 +78,7 @@ with tab1:
                     df_plot = df_obj_pareto.head(max_items)
                 else:
                     df_plot = df_obj_pareto
-                
-                from plotly.subplots import make_subplots
-                import plotly.graph_objects as go
-                
+
                 fig_pareto = make_subplots(specs=[[{"secondary_y": True}]])
                 
                 # Bar Trace (Count)
@@ -217,11 +137,8 @@ with tab1:
             else:
                 st.info("Tidak ada data untuk Analisis Pareto.")
 
-        # --- 2. TREEMAP CHART (Right) ---
         with col_treemap:
-            # Treemap Logic with Parent-Child Hierarchy
             if 'temuan_nama_spesifik' in df_analysis.columns and 'temuan_parent' in df_analysis.columns:
-                
                 if selected_parent == "Semua":
                     # Hierarchical view: Parent -> Child
                     target_cols = ['temuan_parent', 'temuan_nama_spesifik']
@@ -313,16 +230,9 @@ with tab1:
             
             st.plotly_chart(fig_tree, use_container_width=True)
 
-# ============================================
-# TAB 2: CONDITION WORDCLOUD
-# ============================================
-with tab2:
+with analisisKondisi:
     st.caption("Visualisasi kata yang paling sering muncul berdasarkan data temuan")
-    
-    # Single control for both wordclouds
     word_limit = st.selectbox("Tampilkan Jumlah Kata:", [10, 20, 30, 50], index=1, key="wordcloud_limit")
-    
-    # --- Real Data from DataFrame ---
     # Kata Sifat (Conditions) from temuan_kondisi column
     kata_sifat_data = {}
     if 'temuan_kondisi' in df_exploded_filtered.columns:
@@ -349,7 +259,6 @@ with tab2:
         if len(nama_series) > 0:
             kata_benda_data = nama_series.value_counts().head(word_limit).to_dict()
     
-    # --- Layout ---
     wc_col1, wc_col2 = st.columns(2)
     
     with wc_col1:
@@ -357,7 +266,7 @@ with tab2:
         st.caption("Kondisi yang paling sering dilaporkan dalam temuan.")
         if kata_sifat_data and len(kata_sifat_data) > 0:
             st.caption(f"{len(kata_sifat_data)} kata unik")
-            render_wordcloud_interactive(kata_sifat_data, 'red')
+            render_wordcloud(kata_sifat_data, 'red')
         else:
             st.info("Tidak ada data kondisi temuan yang valid")
         
@@ -366,18 +275,17 @@ with tab2:
         st.caption("Nama temuan yang paling sering ditemukan.")
         if kata_benda_data and len(kata_benda_data) > 0:
             st.caption(f"{len(kata_benda_data)} objek unik")
-            render_wordcloud_interactive(kata_benda_data, 'green')
+            render_wordcloud(kata_benda_data, 'green')
         else:
             st.info("Tidak ada data objek temuan yang valid")
 
 # ============================================
 # TAB 3: SANKEY FLOW ANALYSIS
 # ============================================
-with tab3:
+with alurKategori:
     if not df_exploded_filtered.empty:
-        # --- Prepare Nodes & Links for Sankey ---
         # Flow: temuan_kategori -> temuan_nama_spesifik -> nama_lokasi
-        cols = ['temuan_kategori', 'temuan_nama_spesifik', 'nama_lokasi']
+        cols = ['temuan_kategori', 'temuan_nama', 'nama_lokasi']
         cols = [c for c in cols if c in df_exploded_filtered.columns]
         
         # Limit Control

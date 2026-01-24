@@ -7,36 +7,24 @@ from datetime import datetime, timedelta
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import HeatMap
+from utils import render_sidebar, set_header_title
 
-# --- 1. Page Configuration ---
 st.set_page_config(
     page_title="DASHBOARD ANALISIS IZAT PLN NP UP SEBALANG",
     page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# --- 2. Styling (Glassmorphism & Colors) ---
-# Styles loaded via utils
-
-
-# --- 3. Data Loading ---
 df_exploded, df_master, df_map = load_data()
 
 if df_master.empty:
     st.error("Data tidak dapat dimuat. Silakan periksa path data.")
     st.stop()
 
-
-# --- 4. Sidebar Filters ---
-from utils import render_sidebar, set_header_title
 df_master_filtered, df_exploded_filtered, granularity = render_sidebar(df_master, df_exploded)
 
-# --- 5. Header & Global Alerts ---
 set_header_title("DASHBOARD ANALISIS IZAT PLN NP UP SEBALANG")
 
-
-# Global Alert for Open Near Miss
 near_miss_open = df_master_filtered[
     (df_master_filtered['temuan_kategori'] == 'Near Miss') & 
     (df_master_filtered['temuan_status'] == 'Open')
@@ -46,12 +34,9 @@ if not near_miss_open.empty:
     count_nm = near_miss_open.shape[0]
     st.error(f"PERINGATAN: Ada {count_nm} temuan 'Near Miss' berstatus OPEN yang memerlukan perhatian segera!")
 
-# --- 6. KPI Cards ---
-# Calculate Metrics
-total_findings = df_master_filtered['kode_temuan'].nunique()
+total_findings = len(df_master_filtered['kode_temuan'])
 
 if 'temuan_status' in df_master_filtered.columns:
-    # Use case-insensitive matching for safety
     status_lower = df_master_filtered['temuan_status'].astype(str).str.lower()
     closed_findings = status_lower[status_lower == 'closed'].shape[0]
     open_findings = status_lower[status_lower == 'open'].shape[0]
@@ -493,7 +478,6 @@ with col_nm:
 
     # st.write(df_master_filtered)
     if not high_risk_df.empty:
-        # Columns: kode_temuan as first column, removed deadline_sla
         cols_to_show = ['kode_temuan', 'tanggal', 'temuan_nama_spesifik', 'nama_lokasi', 'temuan_status']
         # Filter valid columns
         valid_cols = [c for c in cols_to_show if c in high_risk_df.columns]
