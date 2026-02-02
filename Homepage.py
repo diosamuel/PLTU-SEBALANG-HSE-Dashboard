@@ -474,7 +474,7 @@ with col_map:
                 m_home = folium.Map(location=[center_lat, center_lon], zoom_start=16)
                 api_key = st.secrets["api"]
                 folium.TileLayer(
-                    tiles=f"https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg?api_key={api_key['stadia']}",
+                    tiles=f"https://tiles.stadiamaps.com/tiles/alidade_satellite/{{z}}/{{x}}/{{y}}{{r}}.jpg?api_key={api_key['stadia']}",
                     attr='&copy; CNES, Distribution Airbus DS, &copy; Airbus DS, &copy; PlanetObserver | &copy; Stadia Maps',
                     name='Stadia Satellite'
                 ).add_to(m_home)
