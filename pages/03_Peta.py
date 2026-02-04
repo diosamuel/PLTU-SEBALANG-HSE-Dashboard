@@ -42,9 +42,9 @@ with col_map:
             map_key = f"map_data_{len(df_geo)}"
             if map_key not in st.session_state:
                 m = folium.Map(location=[center_lat, center_lon], zoom_start=17)
-                
+                api_key = st.secrets["api"]
                 folium.TileLayer(
-                    tiles='https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg?api_key=0956e908-f9e5-41a5-9d89-f01b65803cc9',
+                    tiles=f"https://tiles.stadiamaps.com/tiles/alidade_satellite/{{z}}/{{x}}/{{y}}{{r}}.jpg?api_key={api_key['stadia']}",
                     attr='&copy; Stadia Maps', name='Stadia Satellite'
                 ).add_to(m)
                 heat_data = [[row['lat'], row['lon']] for index, row in df_geo.iterrows()]
